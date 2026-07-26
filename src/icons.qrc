@@ -13,4 +13,44 @@
         <file alias="reset-resolution.svg">icons/reset-resolution.svg</file>
         <file alias="reset-effects.svg">icons/reset-effects.svg</file>
     </qresource>
+    <qresource prefix="/motifs">
+        <file alias="cat.svg">motifs/cat.svg</file>
+        <file alias="dog.svg">motifs/dog.svg</file>
+        <file alias="bird.svg">motifs/bird.svg</file>
+        <file alias="fish.svg">motifs/fish.svg</file>
+        <file alias="rabbit.svg">motifs/rabbit.svg</file>
+        <file alias="turtle.svg">motifs/turtle.svg</file>
+        <file alias="snail.svg">motifs/snail.svg</file>
+        <file alias="paw-print.svg">motifs/paw-print.svg</file>
+        <file alias="leaf.svg">motifs/leaf.svg</file>
+        <file alias="flower.svg">motifs/flower.svg</file>
+        <file alias="tree-deciduous.svg">motifs/tree-deciduous.svg</file>
+        <file alias="shell.svg">motifs/shell.svg</file>
+        <file alias="feather.svg">motifs/feather.svg</file>
+        <file alias="egg.svg">motifs/egg.svg</file>
+        <file alias="music.svg">motifs/music.svg</file>
+        <file alias="music-2.svg">motifs/music-2.svg</file>
+        <file alias="music-3.svg">motifs/music-3.svg</file>
+        <file alias="music-4.svg">motifs/music-4.svg</file>
+        <file alias="piano.svg">motifs/piano.svg</file>
+        <file alias="guitar.svg">motifs/guitar.svg</file>
+        <file alias="drum.svg">motifs/drum.svg</file>
+        <file alias="moon.svg">motifs/moon.svg</file>
+        <file alias="sun.svg">motifs/sun.svg</file>
+        <file alias="star.svg">motifs/star.svg</file>
+        <file alias="stars.svg">motifs/stars.svg</file>
+        <file alias="cloud.svg">motifs/cloud.svg</file>
+        <file alias="rainbow.svg">motifs/rainbow.svg</file>
+        <file alias="snowflake.svg">motifs/snowflake.svg</file>
+        <file alias="cloud-lightning.svg">motifs/cloud-lightning.svg</file>
+        <file alias="bolt.svg">motifs/bolt.svg</file>
+        <file alias="zap.svg">motifs/zap.svg</file>
+        <file alias="sparkle.svg">motifs/sparkle.svg</file>
+        <file alias="sparkles.svg">motifs/sparkles.svg</file>
+        <file alias="heart.svg">motifs/heart.svg</file>
+        <file alias="crown.svg">motifs/crown.svg</file>
+        <file alias="balloon.svg">motifs/balloon.svg</file>
+        <file alias="gift.svg">motifs/gift.svg</file>
+        <file alias="flame.svg">motifs/flame.svg</file>
+    </qresource>
 </RCC>

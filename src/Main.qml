@@ -451,8 +451,23 @@ Kirigami.ApplicationWindow {
                     checkable: true
                     implicitWidth: Kirigami.Units.gridUnit * 7
                     highlighted: checked
-                    checked: !processor.blurMode
-                    onClicked: processor.blurMode = false
+                    checked: !processor.blurMode && !processor.bgPatternEnabled
+                    onClicked: {
+                        processor.blurMode = false
+                        processor.bgPatternEnabled = false
+                    }
+                    Controls.ButtonGroup.group: modeGroup
+                }
+                Controls.Button {
+                    text: i18n("Pattern")
+                    checkable: true
+                    implicitWidth: Kirigami.Units.gridUnit * 7
+                    highlighted: checked
+                    checked: !processor.blurMode && processor.bgPatternEnabled
+                    onClicked: {
+                        processor.blurMode = false
+                        processor.bgPatternEnabled = true
+                    }
                     Controls.ButtonGroup.group: modeGroup
                 }
 
@@ -480,7 +495,7 @@ Kirigami.ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
-                visible: !processor.blurMode
+                visible: !processor.blurMode && !processor.bgPatternEnabled
 
                 Item { Layout.fillWidth: true }
 
@@ -744,6 +759,356 @@ Kirigami.ApplicationWindow {
                 }
 
                 Item { Layout.fillWidth: true }
+            }
+
+            // ── Pattern controls (visible when Pattern mode is active) ──
+            // Visibility is !processor.blurMode && processor.bgPatternEnabled
+            ColumnLayout {
+                id: patternControls
+                visible: !processor.blurMode && processor.bgPatternEnabled
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                property int patternCatIndex: 0
+
+                // Category tabs
+                Controls.ButtonGroup { id: patternCatGroup }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.alignment: Qt.AlignHCenter
+
+                    Repeater {
+                        model: 6  // geometric + 5 motif categories
+
+                        Controls.Button {
+                            required property int index
+
+                            text: {
+                                if (index === 0) return i18n("Geometric")
+                                return processor.motifCategoryName(index - 1)
+                            }
+                            checkable: true
+                            highlighted: checked
+                            implicitWidth: Kirigami.Units.gridUnit * 5
+                            Controls.ButtonGroup.group: patternCatGroup
+                            checked: {
+                                if (index === 0)
+                                    return patternControls.patternCatIndex === 0
+                                return patternControls.patternCatIndex === index
+                            }
+                            onClicked: {
+                                patternControls.patternCatIndex = index
+                            }
+                        }
+                    }
+                }
+
+                // Pattern grid + Mix mode header
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    Layout.rightMargin: Kirigami.Units.smallSpacing
+
+                    // Mix mode toggle row
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Controls.Label {
+                            text: i18n("Pattern type:")
+                            color: Kirigami.Theme.textColor
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Controls.Switch {
+                            id: mixSwitch
+                            text: i18n("Mix")
+                            checked: processor.bgPatternMixEnabled
+                            onCheckedChanged: processor.bgPatternMixEnabled = checked
+                        }
+                        Controls.Label {
+                            text: i18n("(%1 selected)", processor.bgPatternMixMotifs.length)
+                            visible: mixSwitch.checked
+                            color: Kirigami.Theme.disabledTextColor
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        }
+                    }
+
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 180
+                        contentHeight: patternGrid.height
+                        clip: true
+                        flickableDirection: Flickable.VerticalFlick
+
+                        Flow {
+                            id: patternGrid
+                            width: parent.width
+                            spacing: Kirigami.Units.smallSpacing
+
+                            // Geometric patterns (catIndex === 0)
+                            Repeater {
+                                id: geometricRepeater
+                                model: patternControls.patternCatIndex === 0
+                                       ? processor.geometricPatternCount() : 0
+
+                                delegate: Rectangle {
+                                    required property int index
+
+                                    implicitWidth: 52
+                                    implicitHeight: 52
+                                    radius: Kirigami.Units.cornerRadius
+                                    border.width: {
+                                        if (mixSwitch.checked) {
+                                            var mixList = processor.bgPatternMixMotifs
+                                            return mixList.indexOf(index) >= 0 ? 3 : 1
+                                        }
+                                        return processor.bgPatternType === index ? 3 : 1
+                                    }
+                                    border.color: {
+                                        if (mixSwitch.checked) {
+                                            var mixList = processor.bgPatternMixMotifs
+                                            return mixList.indexOf(index) >= 0
+                                                   ? Kirigami.Theme.highlightColor
+                                                   : Kirigami.Theme.textColor
+                                        }
+                                        return processor.bgPatternType === index
+                                               ? Kirigami.Theme.highlightColor
+                                               : Kirigami.Theme.textColor
+                                    }
+
+                                    Image {
+                                        anchors.fill: parent
+                                        anchors.margins: 2
+                                        source: processor.geometricPatternThumbnail(index, 48)
+                                        fillMode: Image.PreserveAspectFit
+                                        cache: false
+                                        sourceSize.width: 48
+                                        sourceSize.height: 48
+                                    }
+
+                                    Controls.Button {
+                                        anchors.fill: parent
+                                        opacity: 0
+                                        onClicked: {
+                                            if (mixSwitch.checked) {
+                                                processor.toggleMixMotif(index)
+                                            } else {
+                                                processor.bgPatternType = index
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Motif patterns (catIndex 1-7 → category 0-5)
+                            Repeater {
+                                id: motifRepeater
+
+                                model: patternControls.patternCatIndex > 0
+                                       ? (function() {
+                                           var cat = patternControls.patternCatIndex - 1
+                                           var result = []
+                                           for (var i = 0; i < processor.motifPatternCount(); i++) {
+                                               if (processor.motifPatternCategory(i) === cat)
+                                                   result.push(i)
+                                           }
+                                           return result
+                                       })() : []
+
+                                delegate: Rectangle {
+                                    required property int modelData
+
+                                    implicitWidth: 52
+                                    implicitHeight: 52
+                                    radius: Kirigami.Units.cornerRadius
+                                    border.width: {
+                                        var typeIdx = processor.motifOffset() + modelData
+                                        if (mixSwitch.checked) {
+                                            var mixList = processor.bgPatternMixMotifs
+                                            return mixList.indexOf(modelData) >= 0 ? 3 : 1
+                                        }
+                                        return processor.bgPatternType === typeIdx ? 3 : 1
+                                    }
+                                    border.color: {
+                                        if (mixSwitch.checked) {
+                                            var mixList = processor.bgPatternMixMotifs
+                                            return mixList.indexOf(modelData) >= 0
+                                                   ? Kirigami.Theme.highlightColor
+                                                   : Kirigami.Theme.textColor
+                                        }
+                                        var typeIdx = processor.motifOffset() + modelData
+                                        return processor.bgPatternType === typeIdx
+                                               ? Kirigami.Theme.highlightColor
+                                               : Kirigami.Theme.textColor
+                                    }
+
+                                    Image {
+                                        anchors.fill: parent
+                                        anchors.margins: 2
+                                        source: processor.motifPatternThumbnail(modelData, 48)
+                                        fillMode: Image.PreserveAspectFit
+                                        cache: false
+                                        sourceSize.width: 48
+                                        sourceSize.height: 48
+                                    }
+
+                                    Controls.Button {
+                                        anchors.fill: parent
+                                        opacity: 0
+                                        onClicked: {
+                                            var typeIdx = processor.motifOffset() + modelData
+                                            if (mixSwitch.checked) {
+                                                processor.toggleMixMotif(modelData)
+                                            } else {
+                                                processor.bgPatternType = typeIdx
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Background color row
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.alignment: Qt.AlignHCenter
+
+                    Controls.Label {
+                        text: i18n("Bg:")
+                        color: Kirigami.Theme.textColor
+                    }
+
+                    Repeater {
+                        model: ["#ffffff","#f5f5f5","#dddddd","#aaaaaa","#666666","#eeeeee","#cccccc","#999999","#333333"]
+
+                        Rectangle {
+                            required property string modelData
+
+                            implicitWidth: 22; implicitHeight: 22
+                            radius: 3
+                            border.width: processor.backgroundColor.toString().toUpperCase() === modelData.toUpperCase() ? 2 : 1
+                            border.color: processor.backgroundColor.toString().toUpperCase() === modelData.toUpperCase()
+                                          ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                            color: modelData
+
+                            Controls.Button {
+                                anchors.fill: parent
+                                opacity: 0
+                                onClicked: processor.backgroundColor = modelData
+                            }
+                        }
+                    }
+                }
+
+                // Pattern foreground color row
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.alignment: Qt.AlignHCenter
+
+                    Controls.Label {
+                        text: i18n("Pat:")
+                        color: Kirigami.Theme.textColor
+                    }
+
+                    Repeater {
+                        model: ["#ff6b6b","#f0932b","#f9ca24","#6ab04c","#22a6b3","#4834d4","#be2edd","#666666","#000000"]
+
+                        Rectangle {
+                            required property string modelData
+
+                            implicitWidth: 22; implicitHeight: 22
+                            radius: 3
+                            border.width: processor.bgPatternColor.toString().toUpperCase() === modelData.toUpperCase() ? 2 : 1
+                            border.color: processor.bgPatternColor.toString().toUpperCase() === modelData.toUpperCase()
+                                          ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                            color: modelData
+
+                            Controls.Button {
+                                anchors.fill: parent
+                                opacity: 0
+                                onClicked: processor.bgPatternColor = modelData
+                            }
+                        }
+                    }
+                }
+
+                // Scale slider
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Item { Layout.fillWidth: true }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
+                        Controls.ToolTip.text: i18n("Reset Scale")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.bgPatternScale = 1.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: patternScaleSlider
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                        from: 3; to: 30; stepSize: 1
+                        value: Math.round(processor.bgPatternScale * 10)
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.bgPatternScale * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.bgPatternScale = value / 10.0
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+
+                // Rotation slider
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Item { Layout.fillWidth: true }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/rotation.svg" }
+                        Controls.ToolTip.text: i18n("Reset Rotation")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.bgPatternRotation = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: patternRotSlider
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                        from: 0; to: 360; stepSize: 1
+                        value: processor.bgPatternRotation
+                        Controls.ToolTip.text: i18n("%1°", processor.bgPatternRotation)
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.bgPatternRotation = value
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
             }
 
             // ── Accordion slider groups (below colour controls) ──
@@ -1173,6 +1538,13 @@ Kirigami.ApplicationWindow {
         function onCaStrengthChanged() { previewDebounce.restart(); }
         function onPhotoFrameChanged() { previewDebounce.restart(); }
         function onPhotoFrameWidthChanged() { previewDebounce.restart(); }
+        function onBgPatternEnabledChanged() { previewDebounce.restart(); }
+        function onBgPatternTypeChanged() { previewDebounce.restart(); }
+        function onBgPatternColorChanged() { previewDebounce.restart(); }
+        function onBgPatternScaleChanged() { previewDebounce.restart(); }
+        function onBgPatternRotationChanged() { previewDebounce.restart(); }
+        function onBgPatternMixEnabledChanged() { previewDebounce.restart(); }
+        function onBgPatternMixMotifsChanged() { previewDebounce.restart(); }
         function onTargetWidthChanged() {
             previewDebounce.restart();
             widthInput.text = processor.targetWidth;

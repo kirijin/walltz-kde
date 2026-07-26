@@ -10,6 +10,7 @@
 #include <QVariantList>
 #include <QPair>
 #include <QtConcurrent>
+#include <QPainterPath>
 
 class QWindow;
 
@@ -46,6 +47,13 @@ class WallpaperProcessor : public QObject
     Q_PROPERTY(double caStrength READ caStrength WRITE setCaStrength NOTIFY caStrengthChanged)
     Q_PROPERTY(bool photoFrame READ photoFrame WRITE setPhotoFrame NOTIFY photoFrameChanged)
     Q_PROPERTY(int photoFrameWidth READ photoFrameWidth WRITE setPhotoFrameWidth NOTIFY photoFrameWidthChanged)
+    // ── Pattern properties ──
+    Q_PROPERTY(bool bgPatternEnabled READ bgPatternEnabled WRITE setBgPatternEnabled NOTIFY bgPatternEnabledChanged)
+    Q_PROPERTY(int bgPatternType READ bgPatternType WRITE setBgPatternType NOTIFY bgPatternTypeChanged)
+    Q_PROPERTY(QColor bgPatternColor READ bgPatternColor WRITE setBgPatternColor NOTIFY bgPatternColorChanged)
+    Q_PROPERTY(double bgPatternScale READ bgPatternScale WRITE setBgPatternScale NOTIFY bgPatternScaleChanged)
+    Q_PROPERTY(double bgPatternRotation READ bgPatternRotation WRITE setBgPatternRotation NOTIFY bgPatternRotationChanged)
+    Q_PROPERTY(bool bgPatternMixEnabled READ bgPatternMixEnabled WRITE setBgPatternMixEnabled NOTIFY bgPatternMixEnabledChanged)
 
 public:
     explicit WallpaperProcessor(QObject *parent = nullptr);
@@ -81,6 +89,13 @@ public:
     double caStrength() const { return m_caStrength; }
     bool photoFrame() const { return m_photoFrame; }
     int photoFrameWidth() const { return m_photoFrameWidth; }
+    // ── Pattern getters ──
+    bool bgPatternEnabled() const { return m_bgPatternEnabled; }
+    int bgPatternType() const { return m_bgPatternType; }
+    QColor bgPatternColor() const { return m_bgPatternColor; }
+    double bgPatternScale() const { return m_bgPatternScale; }
+    double bgPatternRotation() const { return m_bgPatternRotation; }
+    bool bgPatternMixEnabled() const { return m_bgPatternMixEnabled; }
 
     // ── Existing setters ──
     void setTargetWidth(int w);
@@ -103,6 +118,13 @@ public:
     void setCaStrength(double s);
     void setPhotoFrame(bool on);
     void setPhotoFrameWidth(int w);
+    // ── Pattern setters ──
+    void setBgPatternEnabled(bool on);
+    void setBgPatternType(int t);
+    void setBgPatternColor(const QColor &c);
+    void setBgPatternScale(double s);
+    void setBgPatternRotation(double a);
+    void setBgPatternMixEnabled(bool on);
 
     /// Generate a small processed preview (400px max) — returns file:// URL
     Q_INVOKABLE QString generatePreview(const QString &sourcePath);
@@ -124,6 +146,34 @@ public:
     Q_INVOKABLE QString moodNameV2(int index) const;
     Q_INVOKABLE QString moodColorV2A(int index) const;
     Q_INVOKABLE QString moodColorV2B(int index) const;
+
+    // ── Pattern QML accessors ──
+    /// Total number of geometric pattern types
+    Q_INVOKABLE int geometricPatternCount() const;
+    /// Name of a geometric pattern type (for UI labels)
+    Q_INVOKABLE QString geometricPatternName(int index) const;
+    /// Generate a small thumbnail for a geometric pattern (returns file:// URL)
+    Q_INVOKABLE QString geometricPatternThumbnail(int index, int thumbSize = 60) const;
+
+    /// Total number of motif (icon) pattern types
+    Q_INVOKABLE int motifPatternCount() const;
+    /// Name of a motif pattern
+    Q_INVOKABLE QString motifPatternName(int index) const;
+    /// Category of a motif: 0=animal, 1=critter, 2=nature, 3=music, 4=celestial, 5=whimsical
+    Q_INVOKABLE int motifPatternCategory(int index) const;
+    /// Category name for UI tabs
+    Q_INVOKABLE QString motifCategoryName(int cat) const;
+    /// Offset for motif pattern types (add to motif index to get bgPatternType value)
+    Q_INVOKABLE int motifOffset() const { return MOTIF_OFFSET; }
+    /// Generate a small thumbnail for a motif pattern (returns file:// URL)
+    Q_INVOKABLE QString motifPatternThumbnail(int index, int thumbSize = 60) const;
+
+    /// Get the currently selected mix motif indices (for QML to highlight)
+    Q_INVOKABLE QVariantList bgPatternMixMotifs() const;
+    /// Set mix motif indices
+    Q_INVOKABLE void setBgPatternMixMotifs(const QVariantList &indices);
+    /// Toggle a motif in the mix selection
+    Q_INVOKABLE void toggleMixMotif(int index);
 
 public Q_SLOTS:
     void detectScreenSize();
@@ -174,6 +224,14 @@ Q_SIGNALS:
     void caStrengthChanged();
     void photoFrameChanged();
     void photoFrameWidthChanged();
+    // ── Pattern signals ──
+    void bgPatternEnabledChanged();
+    void bgPatternTypeChanged();
+    void bgPatternColorChanged();
+    void bgPatternScaleChanged();
+    void bgPatternRotationChanged();
+    void bgPatternMixEnabledChanged();
+    void bgPatternMixMotifsChanged();
 
 private:
     int m_targetWidth = 1920;
@@ -219,7 +277,20 @@ private:
     QColor m_moodColorsV2B[6];      // V2 mood gradient color B
     bool m_moodsComputed = false;   // true after computeAllMoods()
 
+    // ── Pattern parameters ──
+    bool m_bgPatternEnabled = false;
+    int m_bgPatternType = 0;         // 0..14 = geometric, 100+ = motif
+    QColor m_bgPatternColor = QColor(120, 120, 120); // pattern foreground
+    double m_bgPatternScale = 1.0;   // 0.3 – 3.0
+    double m_bgPatternRotation = 0.0; // degrees
+    bool m_bgPatternMixEnabled = false;
+    QList<int> m_bgPatternMixMotifs;  // indices into motif list for mix mode
+
     QImage m_blurBuf;               // pre-allocated temp buffer for blur passes
+
+    // ── Cached pattern thumbnails ──
+    mutable QHash<int, QString> m_geometricThumbnailCache;
+    mutable QHash<int, QString> m_motifThumbnailCache;
 
     bool processSingleImage(const QString &sourcePath, QString &outPath);
     QImage renderWallpaper(const QImage &src, int W, int H);
@@ -260,6 +331,51 @@ private:
         QRgb color2;
     };
     static const GradientPreset s_presets[12];
+
+    // ── Pattern constants ──
+    static constexpr int GEOMETRIC_PATTERN_COUNT = 15;
+    static constexpr int MOTIF_OFFSET = 100;
+    static constexpr int MOTIF_PATTERN_COUNT = 38;
+
+    // ── Pattern generation ──
+    /// Main entry: render a pattern onto the full output canvas
+    void renderPatternBackground(QPainter &p, int W, int H);
+
+    /// Generate a tile for a geometric pattern
+    QImage generateGeometricTile(int type, int tileSize, const QColor &bg, const QColor &fg, double scale);
+
+    /// Generate a tile for a motif (icon) pattern
+    QImage generateMotifTile(int motifIndex, int tileSize, const QColor &bg, const QColor &fg, double scale);
+
+    /// Generate a tile for mixed motifs
+    QImage generateMixedTile(const QList<int> &motifIndices, int tileSize, const QColor &bg, const QColor &fg, double scale);
+
+    /// Build a QPainterPath for a motif icon (normalized to 100x100 viewport)
+    static QPainterPath buildMotifPath(int index);
+
+    /// Render a single icon path onto a canvas at a given position and size
+    static void renderIcon(QPainter &p, const QPainterPath &path,
+                           double cx, double cy, double size, const QColor &color);
+
+    /// Generate a thumbnail image for a pattern type (used in UI)
+    QImage generatePatternThumbnail(int type, int thumbSize) const;
+
+    /// Render a single motif icon to a small image for thumbnails
+    QImage renderMotifIcon(int index, int size) const;
+
+    /// Helper: tile an image across the output
+    static void tileImage(QPainter &p, const QImage &tile, int W, int H);
+
+    /// Geometric pattern names
+    static const char *s_geometricNames[GEOMETRIC_PATTERN_COUNT];
+    /// Motif pattern names (in categories: animals, critters, nature, music, celestial, whimsical)
+    static const char *s_motifNames[MOTIF_PATTERN_COUNT];
+    /// Motif category mapping (0=animals, 1=nature, 2=music, 3=celestial, 4=whimsical)
+    static const int s_motifCategories[MOTIF_PATTERN_COUNT];
+    /// SVG resource filenames for each motif (without extension)
+    static const char *s_motifSvgFiles[MOTIF_PATTERN_COUNT];
+    /// Category names
+    static const char *s_categoryNames[5];
 };
 
 #endif // WALLPAPERPROCESSOR_H
