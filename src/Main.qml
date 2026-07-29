@@ -8,10 +8,17 @@ import org.walltz.processor 1.0
 Kirigami.ApplicationWindow {
     id: root
 
-    width: 640
+    width: 720
     height: 720
-    minimumWidth: 640
+    minimumWidth: leftColumn.Layout.minimumWidth 
+                   + rightColumn.Layout.minimumWidth 
+                   + mainPage.leftPadding + mainPage.rightPadding
+                   + Kirigami.Units.smallSpacing * 2 + Kirigami.Units.largeSpacing
     minimumHeight: 600
+
+    maximumWidth: minimumWidth
+
+    Component.onCompleted: width = minimumWidth
 
     title: i18nc("@title:window", "Walltz")
 
@@ -350,6 +357,7 @@ Kirigami.ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
 
                 Item { Layout.fillWidth: true }
 
@@ -428,12 +436,26 @@ Kirigami.ApplicationWindow {
                 Item { Layout.fillWidth: true }
             }
 
+            // ── Two-column split (main + effects) ──
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.largeSpacing
+
+                ColumnLayout {
+                    id: leftColumn
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: Kirigami.Units.gridUnit * 28
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 28
+                    Layout.alignment: Qt.AlignTop
+                    spacing: Kirigami.Units.smallSpacing
+
             // ── Mode toggle (always visible) ──
             Controls.ButtonGroup { id: modeGroup }
 
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
 
                 Item { Layout.fillWidth: true }
 
@@ -495,14 +517,15 @@ Kirigami.ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
-                visible: !processor.blurMode && !processor.bgPatternEnabled
+                visible: !processor.blurMode
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
 
                 Item { Layout.fillWidth: true }
 
                 Controls.Button {
                     text: i18n("Solid")
                     checkable: true
-                    implicitWidth: Kirigami.Units.gridUnit * 5
+                    implicitWidth: Kirigami.Units.gridUnit * 7
                     highlighted: checked
                     checked: processor.bgGradientStyle === 0
                     onClicked: processor.bgGradientStyle = 0
@@ -511,16 +534,16 @@ Kirigami.ApplicationWindow {
                 Controls.Button {
                     text: i18n("Gradient")
                     checkable: true
-                    implicitWidth: Kirigami.Units.gridUnit * 5
+                    implicitWidth: Kirigami.Units.gridUnit * 7
                     highlighted: checked
                     checked: processor.bgGradientStyle === 1
                     onClicked: processor.bgGradientStyle = 1
                     Controls.ButtonGroup.group: fillGroup
                 }
                 Controls.Button {
-                    text: i18n("Auto")
+                    text: i18n("Mood")
                     checkable: true
-                    implicitWidth: Kirigami.Units.gridUnit * 5
+                    implicitWidth: Kirigami.Units.gridUnit * 7
                     highlighted: checked
                     checked: processor.bgGradientStyle === 2
                     onClicked: processor.bgGradientStyle = 2
@@ -535,6 +558,7 @@ Kirigami.ApplicationWindow {
                 visible: !processor.blurMode && processor.bgGradientStyle === 0
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
 
                 Item { Layout.fillWidth: true }
 
@@ -574,8 +598,8 @@ Kirigami.ApplicationWindow {
                 // Preset swatches
                 Repeater {
                     model: [
-                        "#ff6b6b","#f0932b","#f9ca24","#6ab04c",
-                        "#22a6b3","#4834d4","#be2edd","#666666","#000000"
+                        "#d4c5a9","#b8b8c8","#a3c4a8",
+                        "#a8c5d4","#c9b8b8","#b8b8d4","#888888","#555555","#333333"
                     ]
 
                     Rectangle {
@@ -626,6 +650,7 @@ Kirigami.ApplicationWindow {
                 columns: 6
                 columnSpacing: Kirigami.Units.smallSpacing
                 rowSpacing: Kirigami.Units.smallSpacing
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
 
                 Repeater {
                     model: processor.gradientPresetCount()
@@ -675,13 +700,12 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
-                Item { Layout.fillWidth: true }
-
                 Repeater {
                     model: 6
                     delegate: Controls.Button {
                         text: processor.moodName(index)
                         checkable: true
+                        implicitWidth: Kirigami.Units.gridUnit * 7
                         highlighted: checked
                         Controls.ButtonGroup.group: moodGroup
                         checked: !processor.useV2 && processor.autoMood === index
@@ -692,11 +716,9 @@ Kirigami.ApplicationWindow {
                             processor.useV2 = false
                             moodPreviewTimer.restart()
                         }
-                        implicitWidth: Kirigami.Units.gridUnit * 5
+                        Layout.fillWidth: true
                     }
                 }
-
-                Item { Layout.fillWidth: true }
             }
 
             // Mood palette V2 (Auto mode)
@@ -704,14 +726,14 @@ Kirigami.ApplicationWindow {
                 visible: !processor.blurMode && processor.bgGradientStyle === 2
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
-
-                Item { Layout.fillWidth: true }
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
 
                 Repeater {
                     model: 6
                     delegate: Controls.Button {
                         text: processor.moodNameV2(index)
                         checkable: true
+                        implicitWidth: Kirigami.Units.gridUnit * 7
                         highlighted: checked
                         checked: processor.useV2 && processor.autoMood === index
                         onClicked: {
@@ -721,44 +743,9 @@ Kirigami.ApplicationWindow {
                             processor.useV2 = true
                             moodPreviewTimer.restart()
                         }
-                        implicitWidth: Kirigami.Units.gridUnit * 5
+                        Layout.fillWidth: true
                     }
                 }
-
-                Item { Layout.fillWidth: true }
-            }
-
-            // Angle slider (when Gradient or Auto)
-            RowLayout {
-                visible: !processor.blurMode && processor.bgGradientStyle > 0
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Item { Layout.fillWidth: true }
-
-                Controls.ToolButton {
-                    display: Controls.AbstractButton.IconOnly
-                    contentItem: ThemedIcon { source: "qrc:/icons/angle.svg" }
-                    Controls.ToolTip.text: i18n("Reset Angle")
-                    Controls.ToolTip.visible: hovered
-                    Controls.ToolTip.delay: 400
-                    onClicked: {
-                        processor.gradientAngle = 45.0
-                        previewDebounce.restart()
-                    }
-                }
-                Controls.Slider {
-                    id: gradSlider
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 10
-                    from: 0; to: 360; stepSize: 1
-                    value: processor.gradientAngle
-                    Controls.ToolTip.text: i18n("%1°", processor.gradientAngle)
-                    Controls.ToolTip.visible: hovered
-                    Controls.ToolTip.delay: 400
-                    onMoved: processor.gradientAngle = value
-                }
-
-                Item { Layout.fillWidth: true }
             }
 
             // ── Pattern controls (visible when Pattern mode is active) ──
@@ -770,27 +757,31 @@ Kirigami.ApplicationWindow {
                 spacing: Kirigami.Units.smallSpacing
                 property int patternCatIndex: 0
 
-                // Category tabs
+                // Category tabs — 2 rows of 4
                 Controls.ButtonGroup { id: patternCatGroup }
 
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    Layout.alignment: Qt.AlignHCenter
+                    columns: 4
+                    rowSpacing: Kirigami.Units.smallSpacing
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
 
                     Repeater {
-                        model: 6  // geometric + 5 motif categories
+                        model: 8  // geometric + tiled + 6 motif categories
 
                         Controls.Button {
                             required property int index
 
                             text: {
                                 if (index === 0) return i18n("Geometric")
-                                return processor.motifCategoryName(index - 1)
+                                if (index === 1) return i18n("Tiled")
+                                return processor.motifCategoryName(index - 2)
                             }
                             checkable: true
                             highlighted: checked
-                            implicitWidth: Kirigami.Units.gridUnit * 5
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 7
                             Controls.ButtonGroup.group: patternCatGroup
                             checked: {
                                 if (index === 0)
@@ -800,6 +791,7 @@ Kirigami.ApplicationWindow {
                             onClicked: {
                                 patternControls.patternCatIndex = index
                             }
+                            Layout.alignment: Qt.AlignHCenter
                         }
                     }
                 }
@@ -811,26 +803,44 @@ Kirigami.ApplicationWindow {
                     Layout.leftMargin: Kirigami.Units.smallSpacing
                     Layout.rightMargin: Kirigami.Units.smallSpacing
 
-                    // Mix mode toggle row
+                    // Pattern-mode toggle row
                     RowLayout {
-                        Layout.fillWidth: true
+                        Layout.fillWidth: false
+                        Layout.alignment: Qt.AlignHCenter
                         spacing: Kirigami.Units.smallSpacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
 
-                        Controls.Label {
-                            text: i18n("Pattern type:")
-                            color: Kirigami.Theme.textColor
+                        Controls.Switch {
+                            id: tiltSwitch
+                            text: i18n("Tilt")
+                            checked: processor.bgPatternRandomRotate
+                            onCheckedChanged: {
+                                processor.bgPatternRandomRotate = checked
+                                previewDebounce.restart()
+                            }
                         }
 
-                        Item { Layout.fillWidth: true }
+                        Controls.Switch {
+                            id: organicSwitch
+                            text: i18n("Organic")
+                            checked: processor.bgPatternJitter
+                            onCheckedChanged: {
+                                processor.bgPatternJitter = checked
+                                previewDebounce.restart()
+                            }
+                        }
 
                         Controls.Switch {
                             id: mixSwitch
                             text: i18n("Mix")
                             checked: processor.bgPatternMixEnabled
-                            onCheckedChanged: processor.bgPatternMixEnabled = checked
+                            onCheckedChanged: {
+                                processor.bgPatternMixEnabled = checked
+                                previewDebounce.restart()
+                            }
                         }
                         Controls.Label {
-                            text: i18n("(%1 selected)", processor.bgPatternMixMotifs.length)
+                            text: i18n("(%1 selected)", processor.mixMotifCount)
                             visible: mixSwitch.checked
                             color: Kirigami.Theme.disabledTextColor
                             font.pixelSize: Kirigami.Theme.smallFont.pixelSize
@@ -839,20 +849,82 @@ Kirigami.ApplicationWindow {
 
                     Flickable {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 180
+                        Layout.preferredHeight: 188  // 3 rows of 52px tiles + margins
                         contentHeight: patternGrid.height
                         clip: true
                         flickableDirection: Flickable.VerticalFlick
 
-                        Flow {
+                        Grid {
                             id: patternGrid
-                            width: parent.width
                             spacing: Kirigami.Units.smallSpacing
+                            columns: Math.max(1, Math.floor(parent.width / (52 + Kirigami.Units.smallSpacing)))
+                            anchors.horizontalCenter: parent.horizontalCenter
 
-                            // Geometric patterns (catIndex === 0)
+                            // SVG geometric primitives (catIndex === 0)
                             Repeater {
-                                id: geometricRepeater
+                                id: svgGeoRepeater
                                 model: patternControls.patternCatIndex === 0
+                                       ? processor.svgGeoPatternCount() : 0
+
+                                delegate: Rectangle {
+                                    required property int index
+                                    readonly property int typeIdx: processor.svgGeoOffset() + index
+
+                                    implicitWidth: 52
+                                    implicitHeight: 52
+                                    radius: Kirigami.Units.cornerRadius
+                                    border.width: {
+                                        if (mixSwitch.checked) {
+                                            var mixList = processor.bgPatternMixMotifs
+                                            return mixList.indexOf(typeIdx) >= 0 ? 3 : 0
+                                        }
+                                        return processor.bgPatternType === typeIdx ? 3 : 1
+                                    }
+                                    border.color: {
+                                        if (mixSwitch.checked) {
+                                            var mixList = processor.bgPatternMixMotifs
+                                            return mixList.indexOf(typeIdx) >= 0
+                                                   ? Kirigami.Theme.highlightColor
+                                                   : Kirigami.Theme.textColor
+                                        }
+                                        return processor.bgPatternType === typeIdx
+                                               ? Kirigami.Theme.highlightColor
+                                               : Kirigami.Theme.textColor
+                                    }
+                                    opacity: mixSwitch.checked ? (function() {
+                                        var mixList = processor.bgPatternMixMotifs
+                                        return mixList.indexOf(typeIdx) >= 0 ? 1.0 : 0.4
+                                    })() : 1.0
+
+                                    Image {
+                                        anchors.fill: parent
+                                        anchors.margins: 2
+                                        source: processor.svgGeoPatternThumbnail(index, 48)
+                                        fillMode: Image.PreserveAspectFit
+                                        cache: false
+                                        sourceSize.width: 48
+                                        sourceSize.height: 48
+                                    }
+
+                                    Controls.Button {
+                                        anchors.fill: parent
+                                        opacity: 0
+                                        onClicked: {
+                                            if (mixSwitch.checked) {
+                                                processor.toggleMixMotif(typeIdx)
+                                            } else {
+                                                processor.bgPatternType = typeIdx
+                                            }
+                                            previewDebounce.restart()
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Tiled patterns (catIndex === 1 — old geometric)
+                            Repeater {
+                                id: tiledRepeater
+                                model: patternControls.patternCatIndex === 1
                                        ? processor.geometricPatternCount() : 0
 
                                 delegate: Rectangle {
@@ -864,7 +936,7 @@ Kirigami.ApplicationWindow {
                                     border.width: {
                                         if (mixSwitch.checked) {
                                             var mixList = processor.bgPatternMixMotifs
-                                            return mixList.indexOf(index) >= 0 ? 3 : 1
+                                            return mixList.indexOf(index) >= 0 ? 3 : 0
                                         }
                                         return processor.bgPatternType === index ? 3 : 1
                                     }
@@ -879,6 +951,10 @@ Kirigami.ApplicationWindow {
                                                ? Kirigami.Theme.highlightColor
                                                : Kirigami.Theme.textColor
                                     }
+                                    opacity: mixSwitch.checked ? (function() {
+                                        var mixList = processor.bgPatternMixMotifs
+                                        return mixList.indexOf(index) >= 0 ? 1.0 : 0.4
+                                    })() : 1.0
 
                                     Image {
                                         anchors.fill: parent
@@ -899,18 +975,19 @@ Kirigami.ApplicationWindow {
                                             } else {
                                                 processor.bgPatternType = index
                                             }
+                                            previewDebounce.restart()
                                         }
                                     }
                                 }
                             }
 
-                            // Motif patterns (catIndex 1-7 → category 0-5)
+                            // Motif patterns (catIndex >= 2)
                             Repeater {
                                 id: motifRepeater
 
-                                model: patternControls.patternCatIndex > 0
+                                model: patternControls.patternCatIndex >= 2
                                        ? (function() {
-                                           var cat = patternControls.patternCatIndex - 1
+                                           var cat = patternControls.patternCatIndex - 2
                                            var result = []
                                            for (var i = 0; i < processor.motifPatternCount(); i++) {
                                                if (processor.motifPatternCategory(i) === cat)
@@ -929,14 +1006,14 @@ Kirigami.ApplicationWindow {
                                         var typeIdx = processor.motifOffset() + modelData
                                         if (mixSwitch.checked) {
                                             var mixList = processor.bgPatternMixMotifs
-                                            return mixList.indexOf(modelData) >= 0 ? 3 : 1
+                                            return mixList.indexOf(typeIdx) >= 0 ? 3 : 0
                                         }
                                         return processor.bgPatternType === typeIdx ? 3 : 1
                                     }
                                     border.color: {
                                         if (mixSwitch.checked) {
                                             var mixList = processor.bgPatternMixMotifs
-                                            return mixList.indexOf(modelData) >= 0
+                                            return mixList.indexOf(processor.motifOffset() + modelData) >= 0
                                                    ? Kirigami.Theme.highlightColor
                                                    : Kirigami.Theme.textColor
                                         }
@@ -945,6 +1022,10 @@ Kirigami.ApplicationWindow {
                                                ? Kirigami.Theme.highlightColor
                                                : Kirigami.Theme.textColor
                                     }
+                                    opacity: mixSwitch.checked ? (function() {
+                                        var mixList = processor.bgPatternMixMotifs
+                                        return mixList.indexOf(processor.motifOffset() + modelData) >= 0 ? 1.0 : 0.4
+                                    })() : 1.0
 
                                     Image {
                                         anchors.fill: parent
@@ -962,10 +1043,11 @@ Kirigami.ApplicationWindow {
                                         onClicked: {
                                             var typeIdx = processor.motifOffset() + modelData
                                             if (mixSwitch.checked) {
-                                                processor.toggleMixMotif(modelData)
+                                                processor.toggleMixMotif(typeIdx)
                                             } else {
                                                 processor.bgPatternType = typeIdx
                                             }
+                                            previewDebounce.restart()
                                         }
                                     }
                                 }
@@ -974,80 +1056,195 @@ Kirigami.ApplicationWindow {
                     }
                 }
 
-                // Background color row
-                RowLayout {
+
+            }
+
+            }  // end of leftColumn
+
+            // ── Elegant vertical separator ──
+            Rectangle {
+                Layout.fillHeight: true
+                Layout.topMargin: Kirigami.Units.smallSpacing
+                Layout.preferredWidth: 1
+                color: Kirigami.Theme.disabledTextColor
+                opacity: 0.25
+            }
+
+            // ── Right column: effects ──
+            ColumnLayout {
+                id: rightColumn
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 14
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 14
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.Label {
+                    text: i18n("Effects")
+                    font.bold: true
+                    color: Kirigami.Theme.textColor
+                    horizontalAlignment: Text.AlignHCenter
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    Layout.alignment: Qt.AlignHCenter
-
-                    Controls.Label {
-                        text: i18n("Bg:")
-                        color: Kirigami.Theme.textColor
-                    }
-
-                    Repeater {
-                        model: ["#ffffff","#f5f5f5","#dddddd","#aaaaaa","#666666","#eeeeee","#cccccc","#999999","#333333"]
-
-                        Rectangle {
-                            required property string modelData
-
-                            implicitWidth: 22; implicitHeight: 22
-                            radius: 3
-                            border.width: processor.backgroundColor.toString().toUpperCase() === modelData.toUpperCase() ? 2 : 1
-                            border.color: processor.backgroundColor.toString().toUpperCase() === modelData.toUpperCase()
-                                          ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
-                            color: modelData
-
-                            Controls.Button {
-                                anchors.fill: parent
-                                opacity: 0
-                                onClicked: processor.backgroundColor = modelData
-                            }
-                        }
-                    }
                 }
 
-                // Pattern foreground color row
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    Layout.alignment: Qt.AlignHCenter
-
-                    Controls.Label {
-                        text: i18n("Pat:")
-                        color: Kirigami.Theme.textColor
-                    }
-
-                    Repeater {
-                        model: ["#ff6b6b","#f0932b","#f9ca24","#6ab04c","#22a6b3","#4834d4","#be2edd","#666666","#000000"]
-
-                        Rectangle {
-                            required property string modelData
-
-                            implicitWidth: 22; implicitHeight: 22
-                            radius: 3
-                            border.width: processor.bgPatternColor.toString().toUpperCase() === modelData.toUpperCase() ? 2 : 1
-                            border.color: processor.bgPatternColor.toString().toUpperCase() === modelData.toUpperCase()
-                                          ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
-                            color: modelData
-
-                            Controls.Button {
-                                anchors.fill: parent
-                                opacity: 0
-                                onClicked: processor.bgPatternColor = modelData
-                            }
-                        }
-                    }
-                }
-
-                // Scale slider
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Item { Layout.fillWidth: true }
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    columns: 2
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: 2
 
                     Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/vignette.svg" }
+                        Controls.ToolTip.text: i18n("Reset Vignette")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.vignetteStrength = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: 0; to: 1.0; stepSize: 0.05
+                        value: processor.vignetteStrength
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.vignetteStrength * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.vignetteStrength = value
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/grain.svg" }
+                        Controls.ToolTip.text: i18n("Reset Grain")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.grainStrength = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: 0; to: 1.0; stepSize: 0.05
+                        value: processor.grainStrength
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.grainStrength * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.grainStrength = value
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/chromatic-aberration.svg" }
+                        Controls.ToolTip.text: i18n("Reset Chromatic Aberration")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.caStrength = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: 0; to: 1.0; stepSize: 0.05
+                        value: processor.caStrength
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.caStrength * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.caStrength = value
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/frame.svg" }
+                        Controls.ToolTip.text: i18n("Reset Photo Frame")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.photoFrameWidth = 0
+                            processor.photoFrame = false
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: frameWidthSlider
+                        Layout.fillWidth: true
+                        from: 0; to: 25; stepSize: 1
+                        value: processor.photoFrameWidth
+                        Controls.ToolTip.text: processor.photoFrameWidth === 0
+                                      ? i18n("Off")
+                                      : i18n("%1 px", processor.photoFrameWidth)
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.photoFrameWidth = value
+                            if (value > 0) {
+                                processor.photoFrame = true
+                            } else {
+                                processor.photoFrame = false
+                            }
+                            previewDebounce.restart()
+                        }
+                    }
+                }
+
+                Controls.Label {
+                    text: i18n("Page")
+                    font.bold: true
+                    color: Kirigami.Theme.textColor
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                    visible: !processor.blurMode && dropArea.fileList.length > 0
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    visible: dropArea.fileList.length > 0
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    columns: 2
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: 2
+
+                    // Gradient Angle
+                    Controls.ToolButton {
+                        visible: !processor.blurMode && processor.bgGradientStyle > 0
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/angle.svg" }
+                        Controls.ToolTip.text: i18n("Reset Angle")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.gradientAngle = 45.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        visible: !processor.blurMode && processor.bgGradientStyle > 0
+                        Layout.fillWidth: true
+                        from: 0; to: 360; stepSize: 1
+                        value: processor.gradientAngle
+                        Controls.ToolTip.text: i18n("%1°", processor.gradientAngle)
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: processor.gradientAngle = value
+                    }
+
+                    // Pattern Scale
+                    Controls.ToolButton {
+                        visible: !processor.blurMode && processor.bgPatternEnabled
                         display: Controls.AbstractButton.IconOnly
                         contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
                         Controls.ToolTip.text: i18n("Reset Scale")
@@ -1059,8 +1256,8 @@ Kirigami.ApplicationWindow {
                         }
                     }
                     Controls.Slider {
-                        id: patternScaleSlider
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                        visible: !processor.blurMode && processor.bgPatternEnabled
+                        Layout.fillWidth: true
                         from: 3; to: 30; stepSize: 1
                         value: Math.round(processor.bgPatternScale * 10)
                         Controls.ToolTip.text: i18n("%1%", Math.round(processor.bgPatternScale * 100))
@@ -1072,15 +1269,117 @@ Kirigami.ApplicationWindow {
                         }
                     }
 
-                    Item { Layout.fillWidth: true }
+                    // Pattern Spacing
+                    Controls.ToolButton {
+                        visible: !processor.blurMode && processor.bgPatternEnabled && patternControls.patternCatIndex !== 0
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
+                        Controls.ToolTip.text: i18n("Reset Spacing")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.bgPatternSpacing = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        visible: !processor.blurMode && processor.bgPatternEnabled && patternControls.patternCatIndex !== 0
+                        Layout.fillWidth: true
+                        from: 0; to: 20; stepSize: 1
+                        value: Math.round(processor.bgPatternSpacing * 10)
+                        Controls.ToolTip.text: i18n("%1% gap", Math.round(processor.bgPatternSpacing * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.bgPatternSpacing = value / 10.0
+                            previewDebounce.restart()
+                        }
+                    }
                 }
 
-                // Rotation slider
-                RowLayout {
+                Controls.Label {
+                    text: i18n("Background")
+                    font.bold: true
+                    color: Kirigami.Theme.textColor
+                    horizontalAlignment: Text.AlignHCenter
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
+                    visible: processor.blurMode
+                }
 
-                    Item { Layout.fillWidth: true }
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: 2
+                    visible: processor.blurMode
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/blur.svg" }
+                        Controls.ToolTip.text: i18n("Reset Blur")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.blurRadius = 0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: blurSlider
+                        Layout.fillWidth: true
+                        from: 0; to: 120; stepSize: 1
+                        value: processor.blurRadius
+                        Controls.ToolTip.text: processor.blurRadius === 0
+                                      ? i18n("Auto")
+                                      : i18n("%1 px", processor.blurRadius)
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: processor.blurRadius = value
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/saturation.svg" }
+                        Controls.ToolTip.text: i18n("Reset Saturation")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.saturationFactor = 1.8
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: satSlider
+                        Layout.fillWidth: true
+                        from: 0; to: 30; stepSize: 1
+                        value: processor.saturationFactor * 10
+                        Controls.ToolTip.text: i18n("%1×", processor.saturationFactor.toFixed(1))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: processor.saturationFactor = value / 10.0
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
+                        Controls.ToolTip.text: i18n("Reset Zoom")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.bgZoom = 1.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: zoomSlider
+                        Layout.fillWidth: true
+                        from: 5; to: 30; stepSize: 1
+                        value: Math.round(processor.bgZoom * 10)
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.bgZoom * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: processor.bgZoom = value / 10.0
+                    }
 
                     Controls.ToolButton {
                         display: Controls.AbstractButton.IconOnly
@@ -1089,271 +1388,23 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.bgPatternRotation = 0.0
+                            processor.bgBlurAngle = 0.0
                             previewDebounce.restart()
                         }
                     }
                     Controls.Slider {
-                        id: patternRotSlider
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                        id: bgRotSlider
+                        Layout.fillWidth: true
                         from: 0; to: 360; stepSize: 1
-                        value: processor.bgPatternRotation
-                        Controls.ToolTip.text: i18n("%1°", processor.bgPatternRotation)
+                        value: processor.bgBlurAngle
+                        Controls.ToolTip.text: i18n("%1°", processor.bgBlurAngle)
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
-                        onMoved: {
-                            processor.bgPatternRotation = value
-                            previewDebounce.restart()
-                        }
-                    }
-
-                    Item { Layout.fillWidth: true }
-                }
-            }
-
-            // ── Accordion slider groups (below colour controls) ──
-            RowLayout {
-                Layout.fillWidth: true
-
-                Item { Layout.fillWidth: true }
-
-                ColumnLayout {
-                    id: accordionColumn
-                    spacing: 0
-                    Layout.preferredWidth: ratioRow.width > 0 ? ratioRow.width : previewBox.width
-                    Layout.maximumWidth: ratioRow.width > 0 ? ratioRow.width : previewBox.width
-
-                // Essentials — always visible, 4 sliders, always expanded
-                CollapsibleSection {
-                    id: essentialsSection
-                    title: i18n("Essentials")
-                    expanded: false
-
-                    GridLayout {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: Kirigami.Units.smallSpacing
-                        Layout.rightMargin: Kirigami.Units.smallSpacing
-                        columns: 2
-                        columnSpacing: Kirigami.Units.smallSpacing
-                        rowSpacing: Kirigami.Units.smallSpacing
-
-                        Controls.ToolButton {
-                            display: Controls.AbstractButton.IconOnly
-                            contentItem: ThemedIcon { source: "qrc:/icons/vignette.svg" }
-                            Controls.ToolTip.text: i18n("Reset Vignette")
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onClicked: {
-                                processor.vignetteStrength = 0.0
-                                previewDebounce.restart()
-                            }
-                        }
-                        Controls.Slider {
-                            Layout.fillWidth: true
-                            from: 0; to: 1.0; stepSize: 0.05
-                            value: processor.vignetteStrength
-                            Controls.ToolTip.text: i18n("%1%", Math.round(processor.vignetteStrength * 100))
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onMoved: {
-                                processor.vignetteStrength = value
-                                previewDebounce.restart()
-                            }
-                        }
-
-                        Controls.ToolButton {
-                            display: Controls.AbstractButton.IconOnly
-                            contentItem: ThemedIcon { source: "qrc:/icons/grain.svg" }
-                            Controls.ToolTip.text: i18n("Reset Grain")
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onClicked: {
-                                processor.grainStrength = 0.0
-                                previewDebounce.restart()
-                            }
-                        }
-                        Controls.Slider {
-                            Layout.fillWidth: true
-                            from: 0; to: 1.0; stepSize: 0.05
-                            value: processor.grainStrength
-                            Controls.ToolTip.text: i18n("%1%", Math.round(processor.grainStrength * 100))
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onMoved: {
-                                processor.grainStrength = value
-                                previewDebounce.restart()
-                            }
-                        }
-
-                        Controls.ToolButton {
-                            display: Controls.AbstractButton.IconOnly
-                            contentItem: ThemedIcon { source: "qrc:/icons/chromatic-aberration.svg" }
-                            Controls.ToolTip.text: i18n("Reset Chromatic Aberration")
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onClicked: {
-                                processor.caStrength = 0.0
-                                previewDebounce.restart()
-                            }
-                        }
-                        Controls.Slider {
-                            Layout.fillWidth: true
-                            from: 0; to: 1.0; stepSize: 0.05
-                            value: processor.caStrength
-                            Controls.ToolTip.text: i18n("%1%", Math.round(processor.caStrength * 100))
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onMoved: {
-                                processor.caStrength = value
-                                previewDebounce.restart()
-                            }
-                        }
-
-                        Controls.ToolButton {
-                            display: Controls.AbstractButton.IconOnly
-                            contentItem: ThemedIcon { source: "qrc:/icons/frame.svg" }
-                            Controls.ToolTip.text: i18n("Reset Photo Frame")
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onClicked: {
-                                processor.photoFrameWidth = 0
-                                processor.photoFrame = false
-                                previewDebounce.restart()
-                            }
-                        }
-                        Controls.Slider {
-                            id: frameWidthSlider
-                            Layout.fillWidth: true
-                            from: 0; to: 25; stepSize: 1
-                            value: processor.photoFrameWidth
-                            Controls.ToolTip.text: processor.photoFrameWidth === 0
-                                          ? i18n("Off")
-                                          : i18n("%1 px", processor.photoFrameWidth)
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onMoved: {
-                                processor.photoFrameWidth = value
-                                if (value > 0) {
-                                    processor.photoFrame = true
-                                } else {
-                                    processor.photoFrame = false
-                                }
-                                previewDebounce.restart()
-                            }
-                        }
+                        onMoved: processor.bgBlurAngle = value
                     }
                 }
-
-                // Blur effects — visible when blur mode
-                CollapsibleSection {
-                    id: blurSection
-                    title: i18n("Blur")
-                    visible: processor.blurMode
-                    expanded: false
-
-                    GridLayout {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: Kirigami.Units.smallSpacing
-                        Layout.rightMargin: Kirigami.Units.smallSpacing
-                        columns: 2
-                        columnSpacing: Kirigami.Units.smallSpacing
-                        rowSpacing: Kirigami.Units.smallSpacing
-
-                        Controls.ToolButton {
-                            display: Controls.AbstractButton.IconOnly
-                            contentItem: ThemedIcon { source: "qrc:/icons/blur.svg" }
-                            Controls.ToolTip.text: i18n("Reset Blur")
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onClicked: {
-                                processor.blurRadius = 0
-                                previewDebounce.restart()
-                            }
-                        }
-                        Controls.Slider {
-                            id: blurSlider
-                            Layout.fillWidth: true
-                            from: 0; to: 120; stepSize: 1
-                            value: processor.blurRadius
-                            Controls.ToolTip.text: processor.blurRadius === 0
-                                          ? i18n("Auto")
-                                          : i18n("%1 px", processor.blurRadius)
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onMoved: processor.blurRadius = value
-                        }
-
-                        Controls.ToolButton {
-                            display: Controls.AbstractButton.IconOnly
-                            contentItem: ThemedIcon { source: "qrc:/icons/saturation.svg" }
-                            Controls.ToolTip.text: i18n("Reset Saturation")
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onClicked: {
-                                processor.saturationFactor = 1.8
-                                previewDebounce.restart()
-                            }
-                        }
-                        Controls.Slider {
-                            id: satSlider
-                            Layout.fillWidth: true
-                            from: 0; to: 30; stepSize: 1
-                            value: processor.saturationFactor * 10
-                            Controls.ToolTip.text: i18n("%1×", processor.saturationFactor.toFixed(1))
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onMoved: processor.saturationFactor = value / 10.0
-                        }
-
-                        Controls.ToolButton {
-                            display: Controls.AbstractButton.IconOnly
-                            contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
-                            Controls.ToolTip.text: i18n("Reset Zoom")
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onClicked: {
-                                processor.bgZoom = 1.0
-                                previewDebounce.restart()
-                            }
-                        }
-                        Controls.Slider {
-                            id: zoomSlider
-                            Layout.fillWidth: true
-                            from: 5; to: 30; stepSize: 1
-                            value: Math.round(processor.bgZoom * 10)
-                            Controls.ToolTip.text: i18n("%1%", Math.round(processor.bgZoom * 100))
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onMoved: processor.bgZoom = value / 10.0
-                        }
-
-                        Controls.ToolButton {
-                            display: Controls.AbstractButton.IconOnly
-                            contentItem: ThemedIcon { source: "qrc:/icons/rotation.svg" }
-                            Controls.ToolTip.text: i18n("Reset Rotation")
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onClicked: {
-                                processor.bgBlurAngle = 0.0
-                                previewDebounce.restart()
-                            }
-                        }
-                        Controls.Slider {
-                            id: bgRotSlider
-                            Layout.fillWidth: true
-                            from: 0; to: 360; stepSize: 1
-                            value: processor.bgBlurAngle
-                            Controls.ToolTip.text: i18n("%1°", processor.bgBlurAngle)
-                            Controls.ToolTip.visible: hovered
-                            Controls.ToolTip.delay: 400
-                            onMoved: processor.bgBlurAngle = value
-                        }
-                    }
-                }
-                }
-
-                Item { Layout.fillWidth: true }
-            }
+            }  // end of rightColumn
+        }  // end of two-column RowLayout
 
             // ── File list ──
             Controls.Label {
@@ -1412,9 +1463,9 @@ Kirigami.ApplicationWindow {
             columns: 8
             columnSpacing: 4; rowSpacing: 4
             property var colors: [
-                "#ffffff","#f0f0f0","#cccccc","#999999","#666666","#333333","#000000","#1a1a2e",
-                "#ff6b6b","#ee5a24","#f0932b","#f9ca24","#6ab04c","#22a6b3","#4834d4","#be2edd",
-                "#ff9ff3","#f368e0","#feca57","#ffdd59","#48dbfb","#0abde3","#54a0ff","#2e86de"
+                "#ffffff","#f5f0eb","#e8e0d8","#d4c9be","#b8ada0","#8a8078","#5a5048","#3a3028",
+                "#e0d8d0","#d0c8d4","#d0d4c8","#c8d4d8","#d4c8c8","#c8c8d4","#a0a098","#686868",
+                "#f0e8dc","#dcd0c4","#c8c0b4","#b8b098","#a8a898","#989888","#787870","#585850"
             ]
             Repeater {
                 model: parent.colors
@@ -1470,14 +1521,6 @@ Kirigami.ApplicationWindow {
         onTriggered: statusMessage.visible = false
     }
 
-    // Live preview update on tweak changes (debounced)
-    Timer {
-        id: previewDebounce
-        interval: 700
-        repeat: false
-        onTriggered: refreshPreviews()
-    }
-
     function refreshPreviews() {
         var list = dropArea.fileList;
         if (list.length === 0) return;
@@ -1495,6 +1538,14 @@ Kirigami.ApplicationWindow {
         previewList.model = dropArea.fileList;
         if (dropArea.fileList.length > 0)
             crossfadePreview(dropArea.fileList[0].previewUrl);
+    }
+
+    // Live preview update on tweak changes (debounced)
+    Timer {
+        id: previewDebounce
+        interval: 700
+        repeat: false
+        onTriggered: refreshPreviews()
     }
 
     function crossfadePreview(newUrl) {

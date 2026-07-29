@@ -51,16 +51,32 @@ const char *WallpaperProcessor::s_geometricNames[GEOMETRIC_PATTERN_COUNT] = {
     QT_TRANSLATE_NOOP("WP", "Stripes V"),
     QT_TRANSLATE_NOOP("WP", "Stripes D"),
     QT_TRANSLATE_NOOP("WP", "Checkerboard"),
-    QT_TRANSLATE_NOOP("WP", "Triangles"),
-    QT_TRANSLATE_NOOP("WP", "Hexagons"),
     QT_TRANSLATE_NOOP("WP", "Chevron"),
     QT_TRANSLATE_NOOP("WP", "Diamonds"),
     QT_TRANSLATE_NOOP("WP", "Crosshatch"),
-    QT_TRANSLATE_NOOP("WP", "Plus"),
-    QT_TRANSLATE_NOOP("WP", "Concentric"),
-    QT_TRANSLATE_NOOP("WP", "Waves"),
-    QT_TRANSLATE_NOOP("WP", "Plaid"),
-    QT_TRANSLATE_NOOP("WP", "Brick Wall"),
+};
+
+// ── SVG geometric primitive names ─────────────────────────────────────
+
+const char *WallpaperProcessor::s_svgGeoNames[SVG_GEO_COUNT] = {
+    // Row 1 — ornate decorations
+    QT_TRANSLATE_NOOP("WP", "Squares"),
+    QT_TRANSLATE_NOOP("WP", "Triangles"),
+    QT_TRANSLATE_NOOP("WP", "Circles"),
+    QT_TRANSLATE_NOOP("WP", "Rings"),
+    QT_TRANSLATE_NOOP("WP", "Lines"),
+    QT_TRANSLATE_NOOP("WP", "Worms"),
+    QT_TRANSLATE_NOOP("WP", "Dots"),
+    QT_TRANSLATE_NOOP("WP", "Diamonds"),
+    // Row 2 — simple basic shapes
+    QT_TRANSLATE_NOOP("WP", "Square"),
+    QT_TRANSLATE_NOOP("WP", "Triangle"),
+    QT_TRANSLATE_NOOP("WP", "Circle"),
+    QT_TRANSLATE_NOOP("WP", "Diamond"),
+    QT_TRANSLATE_NOOP("WP", "Ring"),
+    QT_TRANSLATE_NOOP("WP", "Wave"),
+    QT_TRANSLATE_NOOP("WP", "Cross"),
+    QT_TRANSLATE_NOOP("WP", "Disc"),
 };
 
 // ── motif pattern names (44 icons in 6 categories) ──────────────────────
@@ -68,7 +84,7 @@ const char *WallpaperProcessor::s_geometricNames[GEOMETRIC_PATTERN_COUNT] = {
 // 26-32   Music        33-42  Celestial     43     Whimsical (hearts at 43)
 
 const char *WallpaperProcessor::s_motifNames[MOTIF_PATTERN_COUNT] = {
-    // 0-7: Animals
+    // 0-13: Animals (expanded from 8 to 14)
     QT_TRANSLATE_NOOP("WP", "Cat"),
     QT_TRANSLATE_NOOP("WP", "Dog"),
     QT_TRANSLATE_NOOP("WP", "Rabbit"),
@@ -77,22 +93,25 @@ const char *WallpaperProcessor::s_motifNames[MOTIF_PATTERN_COUNT] = {
     QT_TRANSLATE_NOOP("WP", "Fish"),
     QT_TRANSLATE_NOOP("WP", "Snail"),
     QT_TRANSLATE_NOOP("WP", "Paw Print"),
-    // 8-13: Nature
+    QT_TRANSLATE_NOOP("WP", "Squirrel"),
+    QT_TRANSLATE_NOOP("WP", "Mouse"),
+    QT_TRANSLATE_NOOP("WP", "Rat"),
+    QT_TRANSLATE_NOOP("WP", "Bug"),
+    QT_TRANSLATE_NOOP("WP", "Bone"),
+    QT_TRANSLATE_NOOP("WP", "Footprints"),
+    // 14-32: Nature (original nature + celestial elements)
     QT_TRANSLATE_NOOP("WP", "Leaf"),
     QT_TRANSLATE_NOOP("WP", "Flower"),
     QT_TRANSLATE_NOOP("WP", "Tree"),
     QT_TRANSLATE_NOOP("WP", "Shell"),
     QT_TRANSLATE_NOOP("WP", "Feather"),
     QT_TRANSLATE_NOOP("WP", "Egg"),
-    // 14-20: Music
-    QT_TRANSLATE_NOOP("WP", "Music"),
-    QT_TRANSLATE_NOOP("WP", "Music 2"),
-    QT_TRANSLATE_NOOP("WP", "Music 3"),
-    QT_TRANSLATE_NOOP("WP", "Music 4"),
-    QT_TRANSLATE_NOOP("WP", "Piano"),
-    QT_TRANSLATE_NOOP("WP", "Guitar"),
-    QT_TRANSLATE_NOOP("WP", "Drum"),
-    // 21-27: Celestial
+    QT_TRANSLATE_NOOP("WP", "Fire"),
+    QT_TRANSLATE_NOOP("WP", "Droplets"),
+    QT_TRANSLATE_NOOP("WP", "Rain"),
+    QT_TRANSLATE_NOOP("WP", "Wind"),
+    QT_TRANSLATE_NOOP("WP", "Mountain"),
+    QT_TRANSLATE_NOOP("WP", "Waves"),
     QT_TRANSLATE_NOOP("WP", "Moon"),
     QT_TRANSLATE_NOOP("WP", "Sun"),
     QT_TRANSLATE_NOOP("WP", "Star"),
@@ -100,46 +119,106 @@ const char *WallpaperProcessor::s_motifNames[MOTIF_PATTERN_COUNT] = {
     QT_TRANSLATE_NOOP("WP", "Rainbow"),
     QT_TRANSLATE_NOOP("WP", "Snowflake"),
     QT_TRANSLATE_NOOP("WP", "Lightning"),
-    // 28-37: Whimsical
+    // 33-48: Art
+    QT_TRANSLATE_NOOP("WP", "Music"),
+    QT_TRANSLATE_NOOP("WP", "Music 2"),
+    QT_TRANSLATE_NOOP("WP", "Music 3"),
+    QT_TRANSLATE_NOOP("WP", "Music 4"),
+    QT_TRANSLATE_NOOP("WP", "Piano"),
+    QT_TRANSLATE_NOOP("WP", "Guitar"),
+    QT_TRANSLATE_NOOP("WP", "Drum"),
+    QT_TRANSLATE_NOOP("WP", "Mic"),
+    QT_TRANSLATE_NOOP("WP", "Headphones"),
+    QT_TRANSLATE_NOOP("WP", "Bell"),
+    QT_TRANSLATE_NOOP("WP", "Disc"),
+    QT_TRANSLATE_NOOP("WP", "Palette"),
+    QT_TRANSLATE_NOOP("WP", "Paintbrush"),
+    QT_TRANSLATE_NOOP("WP", "Theater"),
+    QT_TRANSLATE_NOOP("WP", "Camera"),
+    QT_TRANSLATE_NOOP("WP", "Film"),
+    // 49-63: Lifestyle
     QT_TRANSLATE_NOOP("WP", "Heart"),
     QT_TRANSLATE_NOOP("WP", "Crown"),
     QT_TRANSLATE_NOOP("WP", "Balloon"),
     QT_TRANSLATE_NOOP("WP", "Gift"),
     QT_TRANSLATE_NOOP("WP", "Flame"),
-    QT_TRANSLATE_NOOP("WP", "Stars"),
-    QT_TRANSLATE_NOOP("WP", "Bolt"),
-    QT_TRANSLATE_NOOP("WP", "Zap"),
-    QT_TRANSLATE_NOOP("WP", "Sparkle"),
-    QT_TRANSLATE_NOOP("WP", "Sparkles"),
+    QT_TRANSLATE_NOOP("WP", "Drumstick"),
+    QT_TRANSLATE_NOOP("WP", "Pizza"),
+    QT_TRANSLATE_NOOP("WP", "Coffee"),
+    QT_TRANSLATE_NOOP("WP", "Cake"),
+    QT_TRANSLATE_NOOP("WP", "Cookie"),
+    QT_TRANSLATE_NOOP("WP", "Wine"),
+    QT_TRANSLATE_NOOP("WP", "Book"),
+    QT_TRANSLATE_NOOP("WP", "Dumbbell"),
+    QT_TRANSLATE_NOOP("WP", "Backpack"),
+    QT_TRANSLATE_NOOP("WP", "Shirt"),
+    // 64-69: Emotional
+    QT_TRANSLATE_NOOP("WP", "Smile"),
+    QT_TRANSLATE_NOOP("WP", "Frown"),
+    QT_TRANSLATE_NOOP("WP", "Angry"),
+    QT_TRANSLATE_NOOP("WP", "Laugh"),
+    QT_TRANSLATE_NOOP("WP", "Meh"),
+    QT_TRANSLATE_NOOP("WP", "Annoyed"),
+    // 70-81: Symbolic (royal, heraldic, religious, esoteric)
+    QT_TRANSLATE_NOOP("WP", "Shield"),
+    QT_TRANSLATE_NOOP("WP", "Sword"),
+    QT_TRANSLATE_NOOP("WP", "Diamond"),
+    QT_TRANSLATE_NOOP("WP", "Gem"),
+    QT_TRANSLATE_NOOP("WP", "Infinity"),
+    QT_TRANSLATE_NOOP("WP", "Eye"),
+    QT_TRANSLATE_NOOP("WP", "Cross"),
+    QT_TRANSLATE_NOOP("WP", "Church"),
+    QT_TRANSLATE_NOOP("WP", "Castle"),
+    QT_TRANSLATE_NOOP("WP", "Scroll"),
+    QT_TRANSLATE_NOOP("WP", "Medal"),
+    QT_TRANSLATE_NOOP("WP", "Trophy"),
+    // 82-87: Symbolic — religious
+    QT_TRANSLATE_NOOP("WP", "Orthodox Cross"),
+    QT_TRANSLATE_NOOP("WP", "Moon Star"),
+    QT_TRANSLATE_NOOP("WP", "Menorah"),
+    QT_TRANSLATE_NOOP("WP", "Dharma Wheel"),
+    QT_TRANSLATE_NOOP("WP", "Sacred Book"),
+    QT_TRANSLATE_NOOP("WP", "Hand"),
 };
 
 const int WallpaperProcessor::s_motifCategories[MOTIF_PATTERN_COUNT] = {
-    // animals: 0-7
-    0,0,0,0,0,0,0,0,
-    // nature: 8-13
-    1,1,1,1,1,1,
-    // music: 14-20
-    2,2,2,2,2,2,2,
-    // celestial: 21-27
-    3,3,3,3,3,3,3,
-    // whimsical: 28-37
-    4,4,4,4,4,4,4,4,4,4,
+    // animals: 0-13 (14)
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    // nature: 14-32 (original nature + celestial, 19)
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    // art: 33-48 (16)
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    // lifestyle: 49-63 (15)
+    4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
+    // emotional: 64-69 (6)
+    5,5,5,5,5,5,
+    // symbolic: 70-87 (18)
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
 };
 
-const char *WallpaperProcessor::s_categoryNames[5] = {
+const char *WallpaperProcessor::s_categoryNames[6] = {
     QT_TRANSLATE_NOOP("WP", "Animals"),
     QT_TRANSLATE_NOOP("WP", "Nature"),
-    QT_TRANSLATE_NOOP("WP", "Music"),
-    QT_TRANSLATE_NOOP("WP", "Celestial"),
-    QT_TRANSLATE_NOOP("WP", "Whimsical"),
+    QT_TRANSLATE_NOOP("WP", "Art"),
+    QT_TRANSLATE_NOOP("WP", "Symbolic"),
+    QT_TRANSLATE_NOOP("WP", "Lifestyle"),
+    QT_TRANSLATE_NOOP("WP", "Emotional"),
 };
 
 const char *WallpaperProcessor::s_motifSvgFiles[MOTIF_PATTERN_COUNT] = {
     "cat", "dog", "rabbit", "turtle", "bird", "fish", "snail", "paw-print",
+    "squirrel", "mouse", "rat", "bug", "bone", "footprints",
     "leaf", "flower", "tree-deciduous", "shell", "feather", "egg",
-    "music", "music-2", "music-3", "music-4", "piano", "guitar", "drum",
+    "flame", "droplets", "cloud-rain", "wind", "mountain", "waves",
     "moon", "sun", "star", "cloud", "rainbow", "snowflake", "cloud-lightning",
-    "heart", "crown", "balloon", "gift", "flame", "stars", "bolt", "zap", "sparkle", "sparkles",
+    "music", "music-2", "music-3", "music-4", "piano", "guitar", "drum",
+    "mic", "headphones", "bell", "disc", "palette", "paintbrush", "theater", "camera", "film",
+    "heart", "crown", "balloon", "gift", "flame",
+    "drumstick", "pizza", "coffee", "cake", "cookie", "wine", "book", "dumbbell", "backpack", "shirt",
+    "smile", "frown", "angry", "laugh", "meh", "annoyed",
+    "shield", "sword", "diamond", "gem", "infinity", "eye",
+    "cross", "church", "castle", "scroll", "medal", "trophy",
+    "orthodox-cross", "moon-star", "menorah", "dharma-wheel", "book-open", "hand",
 };
 
 // ── constructor ──────────────────────────────────────────────────────────
@@ -404,6 +483,40 @@ void WallpaperProcessor::setBgPatternRotation(double a)
     if (!qFuzzyCompare(m_bgPatternRotation, a)) {
         m_bgPatternRotation = a;
         Q_EMIT bgPatternRotationChanged();
+    }
+}
+
+void WallpaperProcessor::setBgPatternSpacing(double s)
+{
+    s = qBound(0.0, s, 2.0);
+    if (!qFuzzyCompare(m_bgPatternSpacing, s)) {
+        m_bgPatternSpacing = s;
+        Q_EMIT bgPatternSpacingChanged();
+    }
+}
+
+void WallpaperProcessor::setBgPatternRandomRotate(bool on)
+{
+    if (m_bgPatternRandomRotate != on) {
+        m_bgPatternRandomRotate = on;
+        Q_EMIT bgPatternRandomRotateChanged();
+    }
+}
+
+void WallpaperProcessor::setBgPatternJitter(bool on)
+{
+    if (m_bgPatternJitter != on) {
+        m_bgPatternJitter = on;
+        Q_EMIT bgPatternJitterChanged();
+    }
+}
+
+void WallpaperProcessor::setBgPatternGridAmplitude(double v)
+{
+    v = qBound(0.0, v, 0.5);
+    if (!qFuzzyCompare(m_bgPatternGridAmplitude, v)) {
+        m_bgPatternGridAmplitude = v;
+        Q_EMIT bgPatternGridAmplitudeChanged();
     }
 }
 
@@ -752,50 +865,15 @@ QImage WallpaperProcessor::renderWallpaper(const QImage &src, int W, int H)
 
         p.begin(&output);
         p.drawImage(0, 0, m_blurBuf);
-    } else if (m_bgPatternEnabled) {
-        // ── Pattern: render pattern tile background ──
-        renderPatternBackground(p, W, H);
     } else {
-        // ── Color / Gradient: fill background, then draw centered image ──
-        switch (m_bgGradientStyle) {
-        case 1: {
-            // Gradient preset
-            const auto &preset = s_presets[qBound(0, m_bgGradientPreset, 11)];
-            double rad = m_gradientAngle * M_PI / 180.0;
-            double t = W * 0.5 * qAbs(qCos(rad)) + H * 0.5 * qAbs(qSin(rad));
-            double dx = t * qCos(rad);
-            double dy = t * qSin(rad);
-            double cx2 = W / 2.0, cy2 = H / 2.0;
-            QLinearGradient grad(cx2 - dx, cy2 - dy, cx2 + dx, cy2 + dy);
-            grad.setColorAt(0.0, QColor(preset.color1));
-            grad.setColorAt(1.0, QColor(preset.color2));
-            p.fillRect(0, 0, W, H, grad);
-            break;
-        }
-        case 2: {
-            // Auto gradient from image harmonized colors
-            auto colors = extractHarmonizedColors(src, m_autoMood);
-            double rad = m_gradientAngle * M_PI / 180.0;
-            double t = W * 0.5 * qAbs(qCos(rad)) + H * 0.5 * qAbs(qSin(rad));
-            double dx = t * qCos(rad);
-            double dy = t * qSin(rad);
-            double cx2 = W / 2.0, cy2 = H / 2.0;
-            QLinearGradient grad(cx2 - dx, cy2 - dy, cx2 + dx, cy2 + dy);
-            grad.setColorAt(0.0, colors.first);
-            grad.setColorAt(1.0, colors.second);
-            p.fillRect(0, 0, W, H, grad);
-            break;
-        }
-        default:
-            // Solid color
-            QColor bgColor = m_bgColor;
-            if (m_autoColor) {
-                auto hc = extractHarmonizedColors(src);
-                bgColor = hc.first;
-            }
-            output.fill(bgColor);
-            break;
-        }
+        renderGradientOrSolid(p, output, src, W, H);
+    }
+
+    // ── Pattern overlay (works with any background: blur, gradient, solid, mood) ──
+    if (m_bgPatternEnabled) {
+        // Snapshot current background for per-tile colour sampling
+        QImage bgSnapshot = output.copy();
+        renderAdaptivePattern(p, bgSnapshot, W, H);
     }
 
     // ── Effects (post-processing, applies on all background styles) ──
@@ -970,9 +1048,14 @@ void WallpaperProcessor::tileImage(QPainter &p, const QImage &tile, int W, int H
     if (tile.isNull()) return;
     int tw = tile.width(), th = tile.height();
     if (tw < 1 || th < 1) return;
-    for (int y = 0; y < H; y += th)
-        for (int x = 0; x < W; x += tw)
-            p.drawImage(x, y, tile);
+    // Center tiling: ceil-divide so grid fills canvas symmetrically
+    int countX = (W + tw - 1) / tw;
+    int countY = (H + th - 1) / th;
+    int offsetX = (W - countX * tw) / 2;
+    int offsetY = (H - countY * th) / 2;
+    for (int y = 0; y < countY; ++y)
+        for (int x = 0; x < countX; ++x)
+            p.drawImage(offsetX + x * tw, offsetY + y * th, tile);
 }
 
 // ── Main pattern render dispatcher ───────────────────────────────────────
@@ -984,13 +1067,17 @@ void WallpaperProcessor::renderPatternBackground(QPainter &p, int W, int H)
     QImage tile;
 
     if (m_bgPatternMixEnabled && m_bgPatternMixMotifs.size() > 1) {
-        // Mix mode: multiple motifs in a grid
-        tile = generateMixedTile(m_bgPatternMixMotifs, baseTile * 2,
+        // Mix mode: multiple motifs share one tile cell (grid stays stable)
+        tile = generateMixedTile(m_bgPatternMixMotifs, baseTile,
                                  m_bgColor, m_bgPatternColor, m_bgPatternScale);
     } else if (m_bgPatternType >= MOTIF_OFFSET) {
         int motifIdx = qBound(0, m_bgPatternType - MOTIF_OFFSET, MOTIF_PATTERN_COUNT - 1);
         tile = generateMotifTile(motifIdx, baseTile,
                                  m_bgColor, m_bgPatternColor, m_bgPatternScale);
+    } else if (m_bgPatternType >= SVG_GEO_OFFSET) {
+        int svgIdx = qBound(0, m_bgPatternType - SVG_GEO_OFFSET, SVG_GEO_COUNT - 1);
+        tile = generateSvgGeoTile(svgIdx, baseTile,
+                                  m_bgColor, m_bgPatternColor, m_bgPatternScale);
     } else {
         int gType = qBound(0, m_bgPatternType, GEOMETRIC_PATTERN_COUNT - 1);
         tile = generateGeometricTile(gType, baseTile,
@@ -1012,6 +1099,205 @@ void WallpaperProcessor::renderPatternBackground(QPainter &p, int W, int H)
     }
 
     tileImage(p, tile, W, H);
+}
+
+// ── Background gradient/solid renderer ────────────────────────────────────
+
+void WallpaperProcessor::renderGradientOrSolid(QPainter &p, QImage &output,
+                                                const QImage &src, int W, int H)
+{
+    switch (m_bgGradientStyle) {
+    case 1: {
+        // Gradient preset
+        const auto &preset = s_presets[qBound(0, m_bgGradientPreset, 11)];
+        double rad = m_gradientAngle * M_PI / 180.0;
+        double t = W * 0.5 * qAbs(qCos(rad)) + H * 0.5 * qAbs(qSin(rad));
+        double dx = t * qCos(rad);
+        double dy = t * qSin(rad);
+        double cx2 = W / 2.0, cy2 = H / 2.0;
+        QLinearGradient grad(cx2 - dx, cy2 - dy, cx2 + dx, cy2 + dy);
+        grad.setColorAt(0.0, QColor(preset.color1));
+        grad.setColorAt(1.0, QColor(preset.color2));
+        p.fillRect(0, 0, W, H, grad);
+        break;
+    }
+    case 2: {
+        // Auto gradient from image harmonized colors
+        auto colors = extractHarmonizedColors(src, m_autoMood);
+        double rad = m_gradientAngle * M_PI / 180.0;
+        double t = W * 0.5 * qAbs(qCos(rad)) + H * 0.5 * qAbs(qSin(rad));
+        double dx = t * qCos(rad);
+        double dy = t * qSin(rad);
+        double cx2 = W / 2.0, cy2 = H / 2.0;
+        QLinearGradient grad(cx2 - dx, cy2 - dy, cx2 + dx, cy2 + dy);
+        grad.setColorAt(0.0, colors.first);
+        grad.setColorAt(1.0, colors.second);
+        p.fillRect(0, 0, W, H, grad);
+        break;
+    }
+    default:
+        // Solid color
+        QColor bgColor = m_bgColor;
+        if (m_autoColor) {
+            auto hc = extractHarmonizedColors(src);
+            bgColor = hc.first;
+        }
+        output.fill(bgColor);
+        break;
+    }
+}
+
+// ── Render adaptive pattern overlay ───────────────────────────────────────
+
+void WallpaperProcessor::renderAdaptivePattern(QPainter &p,
+                                                const QImage &background,
+                                                int W, int H)
+{
+    int baseTile = qMax(20, (int)(80 * m_bgPatternScale));
+    int tileW = baseTile;
+    int tileH = baseTile;
+
+    // Auto-add minimum spacing to prevent overlap from jitter / rotation
+    double minExtra = 0.0;
+    if (m_bgPatternJitter)
+        minExtra = qMax(minExtra, m_bgPatternGridAmplitude * 0.8);
+    if (m_bgPatternRandomRotate)
+        minExtra = qMax(minExtra, 0.12);  // rotated tiles need room
+    double effectiveSpacing = qMax(m_bgPatternSpacing, minExtra);
+    double spacingFactor = 1.0 + effectiveSpacing;
+    int stepX = qMax(tileW, (int)(tileW * spacingFactor));
+    int stepY = qMax(tileH, (int)(tileH * spacingFactor));
+
+    // Centered tiling bounds
+    int countX = (W + stepX - 1) / stepX;
+    int countY = (H + stepY - 1) / stepY;
+    int gridOffX = (W - countX * stepX) / 2;
+    int gridOffY = (H - countY * stepY) / 2;
+
+    // ── Global pattern colour: derived from dominant background hue once ──
+    QColor globalPatColor = QColor(180, 180, 180);  // fallback grey
+    {
+        int cx = W / 2, cy = H / 2;
+        int half = qMin(W, H) / 6;
+        if (half < 4) half = 4;
+        double rSum = 0, gSum = 0, bSum = 0;
+        int samples = 0;
+        for (int dy = -half; dy <= half; dy += half / 2) {
+            for (int dx = -half; dx <= half; dx += half / 2) {
+                QColor c = background.pixelColor(
+                    qBound(0, cx + dx, W - 1),
+                    qBound(0, cy + dy, H - 1));
+                rSum += c.red();   gSum += c.green();  bSum += c.blue();
+                samples++;
+            }
+        }
+        if (samples > 0) {
+            QColor avg((int)(rSum / samples), (int)(gSum / samples),
+                       (int)(bSum / samples));
+            double lum = (0.299 * avg.red() + 0.587 * avg.green()
+                         + 0.114 * avg.blue()) / 255.0;
+            if (lum > 0.5) {
+                // Dark pattern on light bg — dim the dominant tone
+                globalPatColor = QColor(
+                    qMax(0, (int)(avg.red()   * 0.25 - 20)),
+                    qMax(0, (int)(avg.green() * 0.25 - 20)),
+                    qMax(0, (int)(avg.blue()  * 0.25 - 20)));
+            } else {
+                // Light pattern on dark bg — brighten
+                globalPatColor = QColor(
+                    qMin(255, (int)(avg.red()   * 0.5 + 140)),
+                    qMin(255, (int)(avg.green() * 0.5 + 140)),
+                    qMin(255, (int)(avg.blue()  * 0.5 + 140)));
+            }
+        }
+    }
+
+    for (int ty = 0; ty < countY; ++ty) {
+        for (int tx = 0; tx < countX; ++tx) {
+            int tileX = gridOffX + tx * stepX;
+            int tileY = gridOffY + ty * stepY;
+
+            // ── Sine-wave grid jitter (organic feel, deterministic) ──
+            if (m_bgPatternJitter) {
+                double amp = qBound(0.0, m_bgPatternGridAmplitude, 0.5);
+                double period = 5.0;
+                double ox = amp * baseTile * sin(2.0 * M_PI * ty / period);
+                double oy = amp * baseTile * cos(2.0 * M_PI * tx / period);
+                tileX += (int)(ox + 0.5);
+                tileY += (int)(oy + 0.5);
+            }
+
+            // ── Per-tile random rotation ──
+            unsigned int seed = (unsigned int)(tx * 374761393u + ty * 668265263u);
+            seed = (seed ^ (seed >> 13)) * 1274126177u;
+            double randomAngle = (double)(seed % 36001) / 100.0;
+
+            // ── Global pattern colour (computed once above) ──
+            QColor patColor = globalPatColor;
+
+            // Generate tile with transparent background and adaptive fg
+            QImage tile;
+            QColor transparent(0, 0, 0, 0);
+
+            if (m_bgPatternMixEnabled && m_bgPatternMixMotifs.size() > 1) {
+                // Cycle across tiles: no same-pattern 8-neighbor adjacency
+                // N≥4 uses (tx + 2*ty) % N (full 8-way separation);
+                // N=2/3 uses (tx+ty) % N (HV separation only — chromatic limit)
+                int nPatterns = m_bgPatternMixMotifs.size();
+                int cycleIdx = nPatterns >= 4
+                    ? (tx + 2 * ty) % nPatterns
+                    : (tx + ty) % nPatterns;
+                int patIdx = m_bgPatternMixMotifs[cycleIdx];
+                if (patIdx >= MOTIF_OFFSET) {
+                    int motifIdx = qBound(0, patIdx - MOTIF_OFFSET, MOTIF_PATTERN_COUNT - 1);
+                    tile = generateMotifTile(motifIdx, tileW,
+                                             transparent, patColor, m_bgPatternScale);
+                } else if (patIdx >= SVG_GEO_OFFSET) {
+                    int svgIdx = qBound(0, patIdx - SVG_GEO_OFFSET, SVG_GEO_COUNT - 1);
+                    tile = generateSvgGeoTile(svgIdx, tileW,
+                                              transparent, patColor, m_bgPatternScale);
+                } else {
+                    int gType = qBound(0, patIdx, GEOMETRIC_PATTERN_COUNT - 1);
+                    tile = generateGeometricTile(gType, tileW,
+                                                 transparent, patColor, m_bgPatternScale);
+                }
+            } else if (m_bgPatternType >= MOTIF_OFFSET) {
+                int motifIdx = qBound(0, m_bgPatternType - MOTIF_OFFSET, MOTIF_PATTERN_COUNT - 1);
+                tile = generateMotifTile(motifIdx, tileW,
+                                         transparent, patColor, m_bgPatternScale);
+            } else if (m_bgPatternType >= SVG_GEO_OFFSET) {
+                int svgIdx = qBound(0, m_bgPatternType - SVG_GEO_OFFSET, SVG_GEO_COUNT - 1);
+                tile = generateSvgGeoTile(svgIdx, tileW,
+                                          transparent, patColor, m_bgPatternScale);
+            } else {
+                int gType = qBound(0, m_bgPatternType, GEOMETRIC_PATTERN_COUNT - 1);
+                tile = generateGeometricTile(gType, tileW,
+                                             transparent, patColor, m_bgPatternScale);
+            }
+
+            if (tile.isNull()) continue;
+
+            // Conditional per-tile random rotation
+            if (m_bgPatternRandomRotate) {
+                QPointF center(tile.width() / 2.0, tile.height() / 2.0);
+                QTransform tf = QTransform()
+                    .translate(center.x(), center.y())
+                    .rotate(randomAngle)
+                    .translate(-center.x(), -center.y());
+                tile = tile.transformed(tf, Qt::SmoothTransformation);
+            }
+
+            // Adjust position for rotated tile size (keep centered)
+            tileX += (tileW - tile.width()) / 2;
+            tileY += (tileH - tile.height()) / 2;
+
+            // Draw with subtle opacity — background shows through transparent tile areas
+            p.save();
+            p.setOpacity(0.35);
+            p.drawImage(tileX, tileY, tile);
+            p.restore();
+        }
+    }
 }
 
 // ── Geometric pattern tile generator ──────────────────────────────────────
@@ -1075,40 +1361,7 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
                     p.drawRect(QRectF(c * cs, r * cs, cs, cs));
         break;
     }
-    case 5: { // Triangles
-        double side = S / 3.0;
-        double h = side * 0.866;
-        for (int row = 0; row < 4; ++row) {
-            for (int col = 0; col < 4; ++col) {
-                double x = col * side * 0.5 - side * 0.5;
-                double y = row * h - h;
-                QPolygonF tri;
-                tri << QPointF(x, y + h) << QPointF(x + side / 2, y)
-                    << QPointF(x + side, y + h);
-                p.drawPolygon(tri);
-            }
-        }
-        break;
-    }
-    case 6: { // Hexagons (honeycomb)
-        double r = S / 4.0;
-        double w = r * 1.732;
-        double h = r * 1.5;
-        for (int row = -1; row < 3; ++row) {
-            for (int col = -1; col < 4; ++col) {
-                double cx = col * w + (row % 2 == 0 ? 0 : w / 2);
-                double cy = row * h;
-                QPolygonF hex;
-                for (int i = 0; i < 6; ++i) {
-                    double a = M_PI / 3.0 * i - M_PI / 6.0;
-                    hex << QPointF(cx + r * cos(a), cy + r * sin(a));
-                }
-                p.drawPolygon(hex);
-            }
-        }
-        break;
-    }
-    case 7: { // Chevron
+    case 5: { // Chevron
         double step = S / 4.0;
         double sw = step * 0.3;
         for (double y = -step; y < S + step; y += step) {
@@ -1119,7 +1372,7 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
         }
         break;
     }
-    case 8: { // Diamonds
+    case 6: { // Diamonds
         double spacing = S / 3.0;
         double hs = spacing * 0.6;
         for (double y = -spacing; y < S + spacing; y += spacing) {
@@ -1132,7 +1385,7 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
         }
         break;
     }
-    case 9: { // Crosshatch
+    case 7: { // Crosshatch
         double spacing = qMax(2.0, S * 0.2);
         double sw = qMax(1.0, spacing * 0.15);
         p.save();
@@ -1147,7 +1400,7 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
         p.restore();
         break;
     }
-    case 10: { // Plus
+    case 8: { // Plus
         double spacing = S / 3.0;
         double pw = spacing * 0.2;
         double pl = spacing * 0.6;
@@ -1159,7 +1412,7 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
         }
         break;
     }
-    case 11: { // Concentric circles
+    case 9: { // Concentric circles
         for (double r = S * 0.4; r > S * 0.05; r -= S * 0.1) {
             p.setPen(QPen(fg, qMax(1.0, S * 0.03)));
             p.setBrush(Qt::NoBrush);
@@ -1169,7 +1422,7 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
         p.setBrush(Qt::NoBrush);
         break;
     }
-    case 12: { // Waves (sine)
+    case 10: { // Waves (sine)
         p.setPen(QPen(fg, qMax(1.0, S * 0.04)));
         p.setBrush(Qt::NoBrush);
         double amplitude = S * 0.2;
@@ -1184,7 +1437,7 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
         p.setPen(Qt::NoPen);
         break;
     }
-    case 13: { // Plaid
+    case 11: { // Plaid
         double spacing = S / 5.0;
         double sw = qMax(1.0, spacing * 0.15);
         // Horizontal
@@ -1195,7 +1448,7 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
             p.drawRect(QRectF(x, 0, sw, S));
         break;
     }
-    case 14: { // Brick Wall
+    case 12: { // Brick Wall
         double brickH = S / 4.0;
         double brickW = S / 2.0;
         double mortar = qMax(1.0, S * 0.02);
@@ -1222,6 +1475,68 @@ QImage WallpaperProcessor::generateGeometricTile(int type, int tileSize,
 QPainterPath WallpaperProcessor::buildMotifPath(int /*index*/)
 {
     return {};
+}
+
+// ── SVG geometric primitive data (embedded SVGs) ─────────────────────
+// Row 1 (indices 0-7): ornate/concentric geometric decorations
+// Row 2 (indices 8-15): simple Lucide-style line icons
+
+static constexpr int kSvgGeoCount = 16;
+
+static const char *s_svgGeoData[kSvgGeoCount] = {
+    // ── Row 1 — ornate concentric decorations (100×100 viewBox) ──
+    // 0 — Squares: 3 concentric rounded squares with alternating fill
+    R"(<svg viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><rect x="24" y="24" width="52" height="52" rx="3" fill="currentColor" opacity="0.25"/><rect x="38" y="38" width="24" height="24" rx="2" fill="currentColor"/></svg>)",
+    // 1 — Triangles: 2 overlapping upright/inverted + center dot
+    R"(<svg viewBox="0 0 100 100"><polygon points="50,8 92,82 8,82" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><polygon points="50,92 8,18 92,18" fill="currentColor" opacity="0.2" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="50" cy="65" r="4" fill="currentColor"/></svg>)",
+    // 2 — Circles: 3 concentric circles
+    R"(<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="50" cy="50" r="26" fill="currentColor" opacity="0.25"/><circle cx="50" cy="50" r="12" fill="currentColor"/></svg>)",
+    // 3 — Rings: thick ring outlines + center dot
+    R"(<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="34" fill="none" stroke="currentColor" stroke-width="8"/><circle cx="50" cy="50" r="16" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="50" cy="50" r="4" fill="currentColor"/></svg>)",
+    // 4 — Lines: scattered short horizontal line segments
+    R"(<svg viewBox="0 0 100 100"><g stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="10" y1="15" x2="40" y2="15"/><line x1="60" y1="15" x2="90" y2="15"/><line x1="30" y1="30" x2="70" y2="30"/><line x1="10" y1="45" x2="50" y2="45"/><line x1="65" y1="45" x2="90" y2="45"/><line x1="20" y1="60" x2="80" y2="60"/><line x1="10" y1="75" x2="35" y2="75"/><line x1="55" y1="75" x2="75" y2="75"/><line x1="10" y1="90" x2="45" y2="90"/><line x1="60" y1="90" x2="90" y2="90"/></g></svg>)",
+    // 5 — Worms: parallel sine curves
+    R"(<svg viewBox="0 0 100 100"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M8,28 Q28,8 48,28 T88,28"/><path d="M8,50 Q28,30 48,50 T88,50"/><path d="M8,72 Q28,52 48,72 T88,72"/></g></svg>)",
+    // 6 — Dots: scattered dots with varying sizes
+    R"(<svg viewBox="0 0 100 100"><g fill="currentColor"><circle cx="18" cy="18" r="4.5"/><circle cx="50" cy="14" r="3"/><circle cx="82" cy="20" r="5"/><circle cx="28" cy="42" r="3.5"/><circle cx="55" cy="34" r="5.5"/><circle cx="78" cy="48" r="3.5"/><circle cx="14" cy="68" r="4.5"/><circle cx="42" cy="62" r="3"/><circle cx="62" cy="72" r="5"/><circle cx="86" cy="65" r="4"/><circle cx="24" cy="88" r="3.5"/><circle cx="50" cy="86" r="5.5"/><circle cx="76" cy="90" r="4.5"/></g></svg>)",
+    // 7 — Diamonds: diamond grid
+    R"(<svg viewBox="0 0 100 100"><g fill="currentColor"><polygon points="20,10 30,20 20,30 10,20"/><polygon points="50,10 60,20 50,30 40,20"/><polygon points="80,10 90,20 80,30 70,20"/><polygon points="35,32 45,42 35,52 25,42"/><polygon points="65,32 75,42 65,52 55,42"/><polygon points="20,52 30,62 20,72 10,62"/><polygon points="50,52 60,62 50,72 40,62"/><polygon points="80,52 90,62 80,72 70,62"/><polygon points="35,72 45,82 35,92 25,82"/><polygon points="65,72 75,82 65,92 55,82"/></g></svg>)",
+    // ── Row 2 — simple Lucide-style geometric shapes (24×24 viewBox) ──
+    R"(<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>)",
+    R"(<svg viewBox="0 0 24 24"><polygon points="12,2 22,20 2,20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>)",
+    R"(<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/></svg>)",
+    R"(<svg viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>)",
+    R"(<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/></svg>)",
+    R"(<svg viewBox="0 0 24 24"><path d="M2,12 Q6,6 10,12 T18,12 T22,12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>)",
+    R"(<svg viewBox="0 0 24 24"><path d="M12,4 L12,20 M4,12 L20,12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>)",
+    R"(<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor" stroke="none"/></svg>)",
+};
+
+/// Render an embedded SVG geometric icon, recoloring to target color.
+static void renderSvgGeoIcon(QPainter &p, int index,
+                             double x, double y, double size, const QColor &color)
+{
+    if (index < 0 || index >= kSvgGeoCount) return;
+
+    QString svgData = QString::fromUtf8(s_svgGeoData[index]);
+    const QString colorStr = QStringLiteral("rgb(%1,%2,%3)")
+                           .arg(color.red()).arg(color.green()).arg(color.blue());
+    svgData.replace(QStringLiteral("currentColor"), colorStr);
+
+    QSvgRenderer renderer(svgData.toUtf8());
+    if (!renderer.isValid()) return;
+
+    p.save();
+    QRectF viewBox = renderer.viewBoxF();
+    if (viewBox.isEmpty())
+        viewBox = QRectF(0, 0, 100, 100);
+    double scale = qMin(size / viewBox.width(), size / viewBox.height());
+    double ox = x + (size - viewBox.width() * scale) / 2.0;
+    double oy = y + (size - viewBox.height() * scale) / 2.0;
+    p.translate(ox, oy);
+    p.scale(scale, scale);
+    renderer.render(&p, viewBox);
+    p.restore();
 }
 
 // ── SVG motif icon renderer ───────────────────────────────────────────────
@@ -1312,12 +1627,23 @@ QImage WallpaperProcessor::generateMixedTile(const QList<int> &motifIndices,
 {
     QList<int> indices = motifIndices;
     indices.erase(std::remove_if(indices.begin(), indices.end(),
-        [](int i) { return i < 0 || i >= MOTIF_PATTERN_COUNT; }), indices.end());
+        [](int i) { return i < 0 || i >= MOTIF_OFFSET + MOTIF_PATTERN_COUNT; }), indices.end());
 
     if (indices.isEmpty())
         return generateMotifTile(0, tileSize, bg, fg, scale);
 
-    int count = qMin(indices.size(), 8);
+    // Filter to only motif indices for rendering in the mixed tile grid
+    QList<int> motifLike;
+    for (int idx : indices) {
+        if (idx >= MOTIF_OFFSET && idx < MOTIF_OFFSET + MOTIF_PATTERN_COUNT)
+            motifLike.append(idx - MOTIF_OFFSET);
+        else if (idx >= SVG_GEO_OFFSET && idx < SVG_GEO_OFFSET + SVG_GEO_COUNT)
+            motifLike.append(idx - SVG_GEO_OFFSET);
+    }
+    if (motifLike.isEmpty())
+        motifLike.append(0);
+
+    int count = qMin(motifLike.size(), 8);
 
     // Determine grid layout
     int cols, rows;
@@ -1339,11 +1665,11 @@ QImage WallpaperProcessor::generateMixedTile(const QList<int> &motifIndices,
     double iconSize = qMin(cellW, cellH) * 0.6;
     int idx = 0;
 
-    for (int r = 0; r < rows && idx < indices.size(); ++r) {
-        for (int c = 0; c < cols && idx < indices.size(); ++c, ++idx) {
+    for (int r = 0; r < rows && idx < motifLike.size(); ++r) {
+        for (int c = 0; c < cols && idx < motifLike.size(); ++c, ++idx) {
             double cx = c * cellW + (cellW - iconSize) / 2.0;
             double cy = r * cellH + (cellH - iconSize) / 2.0;
-            renderSvgMotif(p, QString::fromUtf8(s_motifSvgFiles[indices[idx]]),
+            renderSvgMotif(p, QString::fromUtf8(s_motifSvgFiles[motifLike[idx]]),
                            cx, cy, iconSize, fg);
         }
     }
@@ -1352,7 +1678,30 @@ QImage WallpaperProcessor::generateMixedTile(const QList<int> &motifIndices,
     return tile;
 }
 
-// ── Pattern QML accessors ───────────────────────────────────────────────
+// ── Generate SVG geometric primitive tile ─────────────────────────────
+
+QImage WallpaperProcessor::generateSvgGeoTile(int index, int tileSize,
+                                                const QColor &bg, const QColor &fg,
+                                                double /*scale*/)
+{
+    index = qBound(0, index, SVG_GEO_COUNT - 1);
+    int S = qMax(20, tileSize);
+    QImage tile(S, S, QImage::Format_ARGB32_Premultiplied);
+    tile.fill(bg);
+
+    QPainter p(&tile);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+
+    // Icon size: 75% of tile with centering
+    double iconSize = S * 0.75;
+    double margin = (S - iconSize) / 2.0;
+    renderSvgGeoIcon(p, index, margin, margin, iconSize, fg);
+    p.end();
+    return tile;
+}
+
+// ── Pattern QML accessors
 
 int WallpaperProcessor::geometricPatternCount() const
 {
@@ -1422,10 +1771,40 @@ QImage WallpaperProcessor::generatePatternThumbnail(int type, int thumbSize) con
     if (type >= MOTIF_OFFSET) {
         return const_cast<WallpaperProcessor*>(this)
             ->generateMotifTile(type - MOTIF_OFFSET, S, thumbBg, thumbFg, 1.0);
+    } else if (type >= SVG_GEO_OFFSET) {
+        return const_cast<WallpaperProcessor*>(this)
+            ->generateSvgGeoTile(type - SVG_GEO_OFFSET, S, thumbBg, thumbFg, 1.0);
     } else {
         return const_cast<WallpaperProcessor*>(this)
             ->generateGeometricTile(type, S, thumbBg, thumbFg, 1.0);
     }
+}
+
+// ── SVG geo pattern accessors ─────────────────────────────────────────
+
+QString WallpaperProcessor::svgGeoPatternName(int index) const
+{
+    if (index < 0 || index >= SVG_GEO_COUNT) return {};
+    return i18n(s_svgGeoNames[index]);
+}
+
+QString WallpaperProcessor::svgGeoPatternThumbnail(int index, int thumbSize) const
+{
+    if (index < 0 || index >= SVG_GEO_COUNT) return {};
+    auto it = m_svgGeoThumbnailCache.find(index);
+    if (it != m_svgGeoThumbnailCache.end())
+        return it.value();
+
+    QImage thumb = const_cast<WallpaperProcessor*>(this)
+        ->generateSvgGeoTile(index, thumbSize > 0 ? thumbSize : 60,
+                                       QColor(240, 240, 240), QColor(80, 80, 80), 1.0);
+    QString tmpDir = QDir::tempPath() + QStringLiteral("/walltz");
+    QDir().mkpath(tmpDir);
+    QString path = tmpDir + QStringLiteral("/sgth_%1.png").arg(index);
+    thumb.save(path, "PNG");
+    QString url = QStringLiteral("file://") + path;
+    m_svgGeoThumbnailCache[index] = url;
+    return url;
 }
 
 QImage WallpaperProcessor::renderMotifIcon(int index, int size) const
@@ -1994,7 +2373,7 @@ QString WallpaperProcessor::moodNameV2(int index) const
     static const char *names[] = {
         QT_TRANSLATE_NOOP("WallpaperProcessor", "Dynamic"),    // 0 — highest-contrast pair
         QT_TRANSLATE_NOOP("WallpaperProcessor", "Tonal"),      // 1 — muted, analogous
-        QT_TRANSLATE_NOOP("WallpaperProcessor", "Expressive"), // 2 — most saturated color paired
+        QT_TRANSLATE_NOOP("WallpaperProcessor", "Vivid"), // 2 — most saturated color paired
         QT_TRANSLATE_NOOP("WallpaperProcessor", "Ember"),      // 3 — warmest tones
         QT_TRANSLATE_NOOP("WallpaperProcessor", "Glacier"),    // 4 — coolest tones
         QT_TRANSLATE_NOOP("WallpaperProcessor", "Shadow")      // 5 — darkest pair

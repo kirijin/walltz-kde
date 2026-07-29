@@ -22,12 +22,27 @@
         <file alias="turtle.svg">motifs/turtle.svg</file>
         <file alias="snail.svg">motifs/snail.svg</file>
         <file alias="paw-print.svg">motifs/paw-print.svg</file>
+
+        <file alias="squirrel.svg">motifs/squirrel.svg</file>
+        <file alias="mouse.svg">motifs/mouse.svg</file>
+        <file alias="rat.svg">motifs/rat.svg</file>
+        <file alias="bug.svg">motifs/bug.svg</file>
+        <file alias="bone.svg">motifs/bone.svg</file>
+        <file alias="footprints.svg">motifs/footprints.svg</file>
+
         <file alias="leaf.svg">motifs/leaf.svg</file>
         <file alias="flower.svg">motifs/flower.svg</file>
         <file alias="tree-deciduous.svg">motifs/tree-deciduous.svg</file>
         <file alias="shell.svg">motifs/shell.svg</file>
         <file alias="feather.svg">motifs/feather.svg</file>
         <file alias="egg.svg">motifs/egg.svg</file>
+        <file alias="flame.svg">motifs/flame.svg</file>
+        <file alias="droplets.svg">motifs/droplets.svg</file>
+        <file alias="cloud-rain.svg">motifs/cloud-rain.svg</file>
+        <file alias="wind.svg">motifs/wind.svg</file>
+        <file alias="mountain.svg">motifs/mountain.svg</file>
+        <file alias="waves.svg">motifs/waves.svg</file>
+
         <file alias="music.svg">motifs/music.svg</file>
         <file alias="music-2.svg">motifs/music-2.svg</file>
         <file alias="music-3.svg">motifs/music-3.svg</file>
@@ -35,6 +50,27 @@
         <file alias="piano.svg">motifs/piano.svg</file>
         <file alias="guitar.svg">motifs/guitar.svg</file>
         <file alias="drum.svg">motifs/drum.svg</file>
+        <file alias="mic.svg">motifs/mic.svg</file>
+        <file alias="headphones.svg">motifs/headphones.svg</file>
+        <file alias="drumstick.svg">motifs/drumstick.svg</file>
+        <file alias="bell.svg">motifs/bell.svg</file>
+        <file alias="disc.svg">motifs/disc.svg</file>
+        <file alias="palette.svg">motifs/palette.svg</file>
+        <file alias="paintbrush.svg">motifs/paintbrush.svg</file>
+        <file alias="theater.svg">motifs/theater.svg</file>
+        <file alias="camera.svg">motifs/camera.svg</file>
+        <file alias="film.svg">motifs/film.svg</file>
+
+        <file alias="pizza.svg">motifs/pizza.svg</file>
+        <file alias="coffee.svg">motifs/coffee.svg</file>
+        <file alias="cake.svg">motifs/cake.svg</file>
+        <file alias="cookie.svg">motifs/cookie.svg</file>
+        <file alias="wine.svg">motifs/wine.svg</file>
+        <file alias="book.svg">motifs/book.svg</file>
+        <file alias="dumbbell.svg">motifs/dumbbell.svg</file>
+        <file alias="backpack.svg">motifs/backpack.svg</file>
+        <file alias="shirt.svg">motifs/shirt.svg</file>
+
         <file alias="moon.svg">motifs/moon.svg</file>
         <file alias="sun.svg">motifs/sun.svg</file>
         <file alias="star.svg">motifs/star.svg</file>
@@ -47,10 +83,37 @@
         <file alias="zap.svg">motifs/zap.svg</file>
         <file alias="sparkle.svg">motifs/sparkle.svg</file>
         <file alias="sparkles.svg">motifs/sparkles.svg</file>
+
         <file alias="heart.svg">motifs/heart.svg</file>
         <file alias="crown.svg">motifs/crown.svg</file>
         <file alias="balloon.svg">motifs/balloon.svg</file>
         <file alias="gift.svg">motifs/gift.svg</file>
-        <file alias="flame.svg">motifs/flame.svg</file>
+
+        <file alias="smile.svg">motifs/smile.svg</file>
+        <file alias="frown.svg">motifs/frown.svg</file>
+        <file alias="angry.svg">motifs/angry.svg</file>
+        <file alias="laugh.svg">motifs/laugh.svg</file>
+        <file alias="meh.svg">motifs/meh.svg</file>
+        <file alias="annoyed.svg">motifs/annoyed.svg</file>
+
+        <file alias="shield.svg">motifs/shield.svg</file>
+        <file alias="sword.svg">motifs/sword.svg</file>
+        <file alias="diamond.svg">motifs/diamond.svg</file>
+        <file alias="gem.svg">motifs/gem.svg</file>
+        <file alias="infinity.svg">motifs/infinity.svg</file>
+        <file alias="eye.svg">motifs/eye.svg</file>
+        <file alias="cross.svg">motifs/cross.svg</file>
+        <file alias="church.svg">motifs/church.svg</file>
+        <file alias="castle.svg">motifs/castle.svg</file>
+        <file alias="scroll.svg">motifs/scroll.svg</file>
+        <file alias="medal.svg">motifs/medal.svg</file>
+        <file alias="trophy.svg">motifs/trophy.svg</file>
+
+        <file alias="orthodox-cross.svg">motifs/orthodox-cross.svg</file>
+        <file alias="moon-star.svg">motifs/moon-star.svg</file>
+        <file alias="menorah.svg">motifs/menorah.svg</file>
+        <file alias="dharma-wheel.svg">motifs/dharma-wheel.svg</file>
+        <file alias="book-open.svg">motifs/book-open.svg</file>
+        <file alias="hand.svg">motifs/hand.svg</file>
     </qresource>
 </RCC>
