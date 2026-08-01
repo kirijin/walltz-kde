@@ -45,6 +45,18 @@
   <metadata_license>CC0-1.0</metadata_license>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.0" date="2026-08-01">
+      <description>
+        <p>Golden-rect zoom, pip zoom slider, 90px default blur</p>
+        <ul>
+          <li>Picture zoom ceiling = golden rect; default 80%</li>
+          <li>Photo frame resets to golden 5% on demand; starts off</li>
+          <li>Default preset blur 90 px (0 = auto still settable)</li>
+          <li>PiP zoom slider (1.0–4.0) in always-visible Zoom section</li>
+          <li>More background motifs, Lucide icon set</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-07-22">
       <description>
         <p>Initial release</p>

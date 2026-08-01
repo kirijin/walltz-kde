@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
     QApplication::setOrganizationDomain(QStringLiteral("walltz.app"));
     QApplication::setApplicationName(QStringLiteral("walltz"));
     QApplication::setApplicationDisplayName(i18n("Walltz"));
-    QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QApplication::setApplicationVersion(QStringLiteral("0.2.0"));
 
     QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
 
