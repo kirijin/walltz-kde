@@ -128,12 +128,13 @@ src/
 
 ### 0.2.0 (2026-08-01)
 
+- Pattern backgrounds: 8 geometric shapes + 16 SVG primitives
+- 88 Lucide icons in 6 motif categories, tiled mode, mix mode
 - Picture zoom ceiling = golden rect; default 80%
 - Photo frame resets to golden 5% on demand; starts off
 - Default preset blur 90 px (0 = auto still settable)
 - PiP zoom slider (1.0–4.0) in always-visible Zoom section
 - Blur slider max aligned with clamp (120)
-- More background motifs (Lucide icon set)
 - AppImage no longer shipped; Flatpak is the portable path
 
 ### 0.1.0 (2026-07-19)

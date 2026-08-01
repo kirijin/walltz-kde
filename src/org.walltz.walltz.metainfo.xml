@@ -47,8 +47,9 @@
   <releases>
     <release version="0.2.0" date="2026-08-01">
       <description>
-        <p>Zoom that respects the frame</p>
+        <p>Pattern backgrounds and zoom that respects the frame</p>
         <ul>
+          <li>Pattern backgrounds: 8 geometric shapes, 16 SVG primitives, 88 Lucide icons in 6 categories, tiled and mix modes</li>
           <li>Picture zooms up to the golden margin — and stops there; default 80%</li>
           <li>Reset Photo Frame button — one click back to the golden 5%; frame starts off</li>
           <li>Default preset blurs at 90 px out of the box; auto still available</li>
