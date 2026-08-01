@@ -8,6 +8,10 @@ target_sources(walltz PRIVATE
     main.cpp
     WallpaperProcessor.h
     WallpaperProcessor.cpp
+    blur_presets.h
+    blur_presets.cpp
+    WallpaperAnalyzer.h
+    WallpaperAnalyzer.cpp
     icons.qrc
 )
 

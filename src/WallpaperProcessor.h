@@ -5,12 +5,16 @@
 #include <QImage>
 #include <QSize>
 #include <QString>
-#include <QColor>
 #include <QStringList>
+#include <QColor>
 #include <QVariantList>
 #include <QPair>
+#include <QAtomicInt>
 #include <QtConcurrent>
 #include <QPainterPath>
+
+#include "blur_presets.h"
+#include "WallpaperAnalyzer.h"
 
 class QWindow;
 
@@ -35,6 +39,14 @@ class WallpaperProcessor : public QObject
     // ── New tweakable parameters ──
     Q_PROPERTY(int blurRadius READ blurRadius WRITE setBlurRadius NOTIFY blurRadiusChanged)
     Q_PROPERTY(double saturationFactor READ saturationFactor WRITE setSaturationFactor NOTIFY saturationFactorChanged)
+    // ── Blur preset overlays ──
+    Q_PROPERTY(double overlayOpacity READ overlayOpacity WRITE setOverlayOpacity NOTIFY overlayOpacityChanged)
+    Q_PROPERTY(QColor overlayColor READ overlayColor WRITE setOverlayColor NOTIFY overlayColorChanged)
+    Q_PROPERTY(double blurBrightness READ blurBrightness WRITE setBlurBrightness NOTIFY blurBrightnessChanged)
+    Q_PROPERTY(QString blurPresetId READ blurPresetId NOTIFY blurPresetIdChanged)
+    Q_PROPERTY(QStringList blurPresetNames READ blurPresetNames CONSTANT)
+    Q_PROPERTY(int blurPresetIndex READ blurPresetIndex WRITE setBlurPresetIndex NOTIFY blurPresetIdChanged)
+    Q_INVOKABLE void resetBlurToDefault();
     Q_PROPERTY(int bgGradientStyle READ bgGradientStyle WRITE setBgGradientStyle NOTIFY bgGradientStyleChanged)
     Q_PROPERTY(int bgGradientPreset READ bgGradientPreset WRITE setBgGradientPreset NOTIFY bgGradientPresetChanged)
     Q_PROPERTY(double gradientAngle READ gradientAngle WRITE setGradientAngle NOTIFY gradientAngleChanged)
@@ -47,6 +59,10 @@ class WallpaperProcessor : public QObject
     Q_PROPERTY(double caStrength READ caStrength WRITE setCaStrength NOTIFY caStrengthChanged)
     Q_PROPERTY(bool photoFrame READ photoFrame WRITE setPhotoFrame NOTIFY photoFrameChanged)
     Q_PROPERTY(int photoFrameWidth READ photoFrameWidth WRITE setPhotoFrameWidth NOTIFY photoFrameWidthChanged)
+    Q_PROPERTY(double fgZoom READ fgZoom WRITE setFgZoom NOTIFY fgZoomChanged)
+    Q_PROPERTY(double pipZoom READ pipZoom WRITE setPipZoom NOTIFY pipZoomChanged)
+    Q_PROPERTY(double fgZoomMin READ fgZoomMin NOTIFY fgZoomBoundsChanged)
+    Q_PROPERTY(double fgZoomMax READ fgZoomMax NOTIFY fgZoomBoundsChanged)
     // ── Pattern properties ──
     Q_PROPERTY(bool bgPatternEnabled READ bgPatternEnabled WRITE setBgPatternEnabled NOTIFY bgPatternEnabledChanged)
     Q_PROPERTY(int bgPatternType READ bgPatternType WRITE setBgPatternType NOTIFY bgPatternTypeChanged)
@@ -81,6 +97,14 @@ public:
     // ── New getters ──
     int blurRadius() const { return m_blurRadius; }
     double saturationFactor() const { return m_saturationFactor; }
+    // ── Blur preset getters ──
+    double overlayOpacity() const { return m_overlayOpacity; }
+    QColor overlayColor() const { return m_overlayColor; }
+    double blurBrightness() const { return m_blurBrightness; }
+    QString blurPresetId() const { return m_blurPresetId; }
+    QStringList blurPresetNames() const;
+    int blurPresetIndex() const { return m_blurPresetIndex; }
+    void setBlurPresetIndex(int index);
     int bgGradientStyle() const { return m_bgGradientStyle; }
     int bgGradientPreset() const { return m_bgGradientPreset; }
     double gradientAngle() const { return m_gradientAngle; }
@@ -93,6 +117,12 @@ public:
     double caStrength() const { return m_caStrength; }
     bool photoFrame() const { return m_photoFrame; }
     int photoFrameWidth() const { return m_photoFrameWidth; }
+    double fgZoom() const { return m_fgZoom; }
+    void setFgZoom(double z);
+    double pipZoom() const { return m_pipZoom; }
+    void setPipZoom(double z);
+    double fgZoomMin() const { return m_fgZoomMin; }
+    double fgZoomMax() const { return m_fgZoomMax; }
     // ── Pattern getters ──
     bool bgPatternEnabled() const { return m_bgPatternEnabled; }
     int bgPatternType() const { return m_bgPatternType; }
@@ -114,6 +144,10 @@ public:
     // ── New setters ──
     void setBlurRadius(int r);
     void setSaturationFactor(double f);
+    // ── Blur preset setters ──
+    void setOverlayOpacity(double o);
+    void setOverlayColor(const QColor &c);
+    void setBlurBrightness(double b);
     void setBgGradientStyle(int s);
     void setBgGradientPreset(int p);
     void setGradientAngle(double a);
@@ -235,6 +269,11 @@ Q_SIGNALS:
     // ── New signals ──
     void blurRadiusChanged();
     void saturationFactorChanged();
+    // ── Blur preset signals ──
+    void overlayOpacityChanged();
+    void overlayColorChanged();
+    void blurBrightnessChanged();
+    void blurPresetIdChanged();
     void bgGradientStyleChanged();
     void bgGradientPresetChanged();
     void gradientAngleChanged();
@@ -247,6 +286,9 @@ Q_SIGNALS:
     void caStrengthChanged();
     void photoFrameChanged();
     void photoFrameWidthChanged();
+    void fgZoomChanged();
+    void pipZoomChanged();
+    void fgZoomBoundsChanged();
     // ── Pattern signals ──
     void bgPatternEnabledChanged();
     void bgPatternTypeChanged();
@@ -259,6 +301,7 @@ Q_SIGNALS:
     void bgPatternGridAmplitudeChanged();
     void bgPatternMixEnabledChanged();
     void bgPatternMixMotifsChanged();
+    void previewReady(const QString &sourcePath, const QString &previewUrl);
 
 private:
     int m_targetWidth = 1920;
@@ -284,8 +327,14 @@ private:
     int m_currentIndex = 0;
 
     // ── New tweakable parameters ──
-    int m_blurRadius = 0;          // 0 = auto (adaptive 0.051×H), 1–120 = manual
+    int m_blurRadius = 90;          // Default preset: 90 px blur; 0 = auto (hand-settable)
     double m_saturationFactor = 1.8;
+    // ── Blur preset overlay state ──
+    QString m_blurPresetId = QStringLiteral("default");
+    int m_blurPresetIndex = 0;
+    double m_overlayOpacity = 0.0;
+    QColor m_overlayColor = Qt::black;
+    double m_blurBrightness = 1.0;
     int m_bgGradientStyle = 0;      // 0 = Solid, 1 = Preset, 2 = Auto
     int m_bgGradientPreset = 0;     // index into s_presets[]
     double m_gradientAngle = 45.0;   // degrees (0 = horizontal, 45 = diagonal ↘)
@@ -296,8 +345,12 @@ private:
     double m_vignetteStrength = 0.0; // vignette: 0 = off, 1 = max
     double m_grainStrength = 0.0;    // grain: 0 = off, 1 = max
     double m_caStrength = 0.0;       // chromatic aberration: 0 = off, 1 = max
-    bool m_photoFrame = false;
-    int m_photoFrameWidth = 0;
+    bool m_photoFrame = false;      // frame off at start; golden ρ (5) is the reset-button value
+    int m_photoFrameWidth = 0;      // frame ratio in % of min image dim; 5 = golden ρ, 0 = off
+    double m_fgZoom = 0.8;          // foreground rect zoom: 1 = golden rect (max ceiling); 0.8 = default 80%; <1 = shrink
+    double m_pipZoom = 1.0;         // PiP content magnify: zooms inside the rect, margins stay put
+    double m_fgZoomMin = 0.5;       // last computed zoom bounds (render-time)
+    double m_fgZoomMax = 1.0;
     QColor m_moodColorsA[6];        // cached mood gradient color A (index = mood)
     QColor m_moodColorsB[6];        // cached mood gradient color B
     QColor m_moodColorsV2A[6];      // V2 mood gradient color A (second row)
@@ -319,13 +372,23 @@ private:
 
     QImage m_blurBuf;               // pre-allocated temp buffer for blur passes
 
+    // ── Smart Auto state ──
+    ImageStats m_imageStats;
+    bool m_statsValid = false;
+    void computeSmartAutoAndApply();
+
+    // ── Async preview state ──
+    QString m_lastPreviewUrl;
+    QAtomicInt m_nextRenderId{1};
+    int m_currentRenderId = 0;
+
     // ── Cached pattern thumbnails ──
     mutable QHash<int, QString> m_geometricThumbnailCache;
     mutable QHash<int, QString> m_motifThumbnailCache;
     mutable QHash<int, QString> m_svgGeoThumbnailCache;
 
     bool processSingleImage(const QString &sourcePath, QString &outPath);
-    QImage renderWallpaper(const QImage &src, int W, int H);
+    QImage renderWallpaper(const QImage &src, int W, int H, bool highQuality = false);
     QColor extractAverageColor(const QImage &image);
     QPair<QColor, QColor> extractHarmonizedColors(const QImage &image, int mood = 0);
     void computeMoodPalettes(const QImage &image);
@@ -342,13 +405,18 @@ private:
     /// Scale source image down if both dimensions exceed the target (2/5 iteration)
     static QImage limitImageSize(const QImage &src, int maxW, int maxH);
 
+public:
+
     /// Gaussian blur via 3-pass box blur approximation (O(n), radius-independent)
-    static void stackBlur(QImage &image, double sigma);
+    static void stackBlur(QImage &image, double sigma,
+                          double saturationFactor = 0.0,
+                          double overlayOpacity = 0.0,
+                          QRgb overlayColor = 0,
+                          double brightness = 1.0);
     /// Multi-threaded horizontal box blur pass
     static void boxBlurH(QImage &dst, const QImage &src, int radius);
     /// Multi-threaded vertical box blur pass
     static void boxBlurV(QImage &dst, const QImage &src, int radius);
-    static void boostSaturation(QImage &image, double factor);
     /// Ensure noise texture is allocated (lazy init)
     static void ensureNoiseTexture(int w, int h);
     static QImage s_noiseTexture;       // shared pre-generated noise

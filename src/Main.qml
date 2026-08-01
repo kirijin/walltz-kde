@@ -121,6 +121,8 @@ Kirigami.ApplicationWindow {
                                 fileList = entries;
                                 filePaths = paths;
                                 fileCount = paths.length;
+                                if (fileCount > 0)
+                                    previewContainer._pendingRenders = fileCount
                                 previewList.model = fileList;
                                 if (fileList.length > 0)
                                     previewA.source = fileList[0].previewUrl;
@@ -134,6 +136,9 @@ Kirigami.ApplicationWindow {
                         id: previewContainer
                         anchors.fill: parent
                         visible: dropArea.fileCount > 0
+
+                        property int _pendingRenders: 0
+                        readonly property bool renderInProgress: _pendingRenders > 0
 
                         Image {
                             id: previewA
@@ -153,6 +158,38 @@ Kirigami.ApplicationWindow {
                             opacity: 0.0
                         }
 
+                        // ── Braille loading indicator ──
+                        Rectangle {
+                            id: brailleBox
+                            anchors.centerIn: parent
+                            width: 80; height: 80
+                            radius: 12
+                            color: Qt.rgba(0, 0, 0, 0.55)
+                            visible: previewContainer.renderInProgress
+
+                            property int _idx: 0
+                            readonly property var _chars: [
+                                "\u280B", "\u2819", "\u2839", "\u2838", "\u283C",
+                                "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"
+                            ]
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: brailleBox._chars[brailleBox._idx]
+                                font.pixelSize: 28
+                                font.family: "monospace"
+                                color: "white"
+                            }
+
+                            Timer {
+                                interval: 100; running: brailleBox.visible; repeat: true
+                                onTriggered: {
+                                    brailleBox._idx = (brailleBox._idx + 1) % brailleBox._chars.length
+                                }
+                            }
+                        }
+
+                        // ── Crossfade animation ──
                         SequentialAnimation {
                             id: fadeAnim
                             NumberAnimation { target: previewB; property: "opacity"; to: 1.0; duration: 200 }
@@ -336,12 +373,14 @@ Kirigami.ApplicationWindow {
                     onClicked: {
                         processor.vignetteStrength = 0.0
                         processor.grainStrength = 0.0
-                        processor.blurRadius = 0
+                        processor.blurRadius = 90
                         processor.saturationFactor = 1.8
                         processor.bgZoom = 1.0
                         processor.bgBlurAngle = 0.0
                         processor.gradientAngle = 45.0
                         processor.caStrength = 0.0
+                        processor.fgZoom = 0.8
+                        processor.pipZoom = 1.0
                         processor.photoFrameWidth = 0
                         processor.photoFrame = false
                         previewDebounce.restart()
@@ -465,7 +504,10 @@ Kirigami.ApplicationWindow {
                     implicitWidth: Kirigami.Units.gridUnit * 7
                     highlighted: checked
                     checked: processor.blurMode
-                    onClicked: processor.blurMode = true
+                    onClicked: {
+                        processor.blurMode = true
+                        processor.bgPatternEnabled = false
+                    }
                     Controls.ButtonGroup.group: modeGroup
                 }
                 Controls.Button {
@@ -491,6 +533,48 @@ Kirigami.ApplicationWindow {
                         processor.bgPatternEnabled = true
                     }
                     Controls.ButtonGroup.group: modeGroup
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+
+            // ── Blur preset buttons (visible when Blur mode active) ──
+            RowLayout {
+                visible: processor.blurMode
+                Layout.fillWidth: true
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
+
+                Item { Layout.fillWidth: true }
+
+                Controls.ButtonGroup { id: blurPresetGroup }
+
+                GridLayout {
+                    columns: 5
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: Kirigami.Units.smallSpacing
+
+                    Repeater {
+                        model: processor.blurPresetNames
+
+                        Controls.Button {
+                            required property int index
+                            required property string modelData
+
+                            text: modelData
+                            checkable: true
+                            implicitWidth: Kirigami.Units.gridUnit * 7
+                            highlighted: checked
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 7
+                            Layout.alignment: Qt.AlignHCenter
+                            Controls.ButtonGroup.group: blurPresetGroup
+                            checked: processor.blurPresetIndex === index
+                            onClicked: {
+                                processor.blurPresetIndex = index
+                                previewDebounce.restart()
+                            }
+                        }
+                    }
                 }
 
                 Item { Layout.fillWidth: true }
@@ -1174,8 +1258,8 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.photoFrameWidth = 0
-                            processor.photoFrame = false
+                            processor.photoFrameWidth = 5
+                            processor.photoFrame = true
                             previewDebounce.restart()
                         }
                     }
@@ -1186,7 +1270,7 @@ Kirigami.ApplicationWindow {
                         value: processor.photoFrameWidth
                         Controls.ToolTip.text: processor.photoFrameWidth === 0
                                       ? i18n("Off")
-                                      : i18n("%1 px", processor.photoFrameWidth)
+                                      : i18n("%1%", processor.photoFrameWidth)
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onMoved: {
@@ -1196,6 +1280,184 @@ Kirigami.ApplicationWindow {
                             } else {
                                 processor.photoFrame = false
                             }
+                            previewDebounce.restart()
+                        }
+                    }
+                }
+
+
+                Controls.Label {
+                    text: i18n("Background")
+                    font.bold: true
+                    color: Kirigami.Theme.textColor
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                    visible: processor.blurMode
+                }
+
+                // ── right pane blur sliders ──
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: 2
+                    visible: processor.blurMode
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/blur.svg" }
+                        Controls.ToolTip.text: i18n("Reset Blur")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.blurRadius = 90
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: blurSlider
+                        Layout.fillWidth: true
+                        from: 0; to: 120; stepSize: 1
+                        value: processor.blurRadius
+                        Controls.ToolTip.text: processor.blurRadius === 0
+                                      ? i18n("Auto")
+                                      : i18n("%1 px", processor.blurRadius)
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: processor.blurRadius = value
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/saturation.svg" }
+                        Controls.ToolTip.text: i18n("Reset Saturation")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.saturationFactor = 1.8
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: satSlider
+                        Layout.fillWidth: true
+                        from: 0; to: 30; stepSize: 1
+                        value: processor.saturationFactor * 10
+                        Controls.ToolTip.text: i18n("%1×", processor.saturationFactor.toFixed(1))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: processor.saturationFactor = value / 10.0
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/rotation.svg" }
+                        Controls.ToolTip.text: i18n("Reset Rotation")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.bgBlurAngle = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: bgRotSlider
+                        Layout.fillWidth: true
+                        from: 0; to: 360; stepSize: 1
+                        value: processor.bgBlurAngle
+                        Controls.ToolTip.text: i18n("%1°", processor.bgBlurAngle)
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: processor.bgBlurAngle = value
+                    }
+                }
+
+                Controls.Label {
+                    text: i18n("Zoom")
+                    font.bold: true
+                    color: Kirigami.Theme.textColor
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: 2
+
+                    // Background zoom (blur-mode background only)
+                    Controls.ToolButton {
+                        visible: processor.blurMode
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
+                        Controls.ToolTip.text: i18n("Reset Background Zoom")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.bgZoom = 1.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: zoomSlider
+                        visible: processor.blurMode
+                        Layout.fillWidth: true
+                        from: 5; to: 30; stepSize: 1
+                        value: Math.round(processor.bgZoom * 10)
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.bgZoom * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: processor.bgZoom = value / 10.0
+                    }
+
+                    // Foreground zoom (rect-scaling, whole picture incl. frame)
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/zoom-center.svg" }
+                        Controls.ToolTip.text: i18n("Reset Picture Zoom")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.fgZoom = 0.8
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: processor.fgZoomMin; to: processor.fgZoomMax; stepSize: 0.01
+                        value: processor.fgZoom
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.fgZoom * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.fgZoom = value
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    // PiP zoom (content magnify inside fixed rect, margins stay put)
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/pip.svg" }
+                        Controls.ToolTip.text: i18n("Reset PiP Zoom")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.pipZoom = 1.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: 1.0; to: 4.0; stepSize: 0.05
+                        value: processor.pipZoom
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.pipZoom * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.pipZoom = value
                             previewDebounce.restart()
                         }
                     }
@@ -1212,7 +1474,7 @@ Kirigami.ApplicationWindow {
 
                 GridLayout {
                     Layout.fillWidth: true
-                    visible: dropArea.fileList.length > 0
+                    visible: !processor.blurMode && dropArea.fileList.length > 0
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
                     columns: 2
                     columnSpacing: Kirigami.Units.smallSpacing
@@ -1271,7 +1533,7 @@ Kirigami.ApplicationWindow {
 
                     // Pattern Spacing
                     Controls.ToolButton {
-                        visible: !processor.blurMode && processor.bgPatternEnabled && patternControls.patternCatIndex !== 0
+                        visible: !processor.blurMode && processor.bgPatternEnabled && patternControls.patternCatIndex !== 1
                         display: Controls.AbstractButton.IconOnly
                         contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
                         Controls.ToolTip.text: i18n("Reset Spacing")
@@ -1283,7 +1545,7 @@ Kirigami.ApplicationWindow {
                         }
                     }
                     Controls.Slider {
-                        visible: !processor.blurMode && processor.bgPatternEnabled && patternControls.patternCatIndex !== 0
+                        visible: !processor.blurMode && processor.bgPatternEnabled && patternControls.patternCatIndex !== 1
                         Layout.fillWidth: true
                         from: 0; to: 20; stepSize: 1
                         value: Math.round(processor.bgPatternSpacing * 10)
@@ -1294,113 +1556,6 @@ Kirigami.ApplicationWindow {
                             processor.bgPatternSpacing = value / 10.0
                             previewDebounce.restart()
                         }
-                    }
-                }
-
-                Controls.Label {
-                    text: i18n("Background")
-                    font.bold: true
-                    color: Kirigami.Theme.textColor
-                    horizontalAlignment: Text.AlignHCenter
-                    Layout.fillWidth: true
-                    visible: processor.blurMode
-                }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: 2
-                    columnSpacing: Kirigami.Units.smallSpacing
-                    rowSpacing: 2
-                    visible: processor.blurMode
-
-                    Controls.ToolButton {
-                        display: Controls.AbstractButton.IconOnly
-                        contentItem: ThemedIcon { source: "qrc:/icons/blur.svg" }
-                        Controls.ToolTip.text: i18n("Reset Blur")
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onClicked: {
-                            processor.blurRadius = 0
-                            previewDebounce.restart()
-                        }
-                    }
-                    Controls.Slider {
-                        id: blurSlider
-                        Layout.fillWidth: true
-                        from: 0; to: 120; stepSize: 1
-                        value: processor.blurRadius
-                        Controls.ToolTip.text: processor.blurRadius === 0
-                                      ? i18n("Auto")
-                                      : i18n("%1 px", processor.blurRadius)
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onMoved: processor.blurRadius = value
-                    }
-
-                    Controls.ToolButton {
-                        display: Controls.AbstractButton.IconOnly
-                        contentItem: ThemedIcon { source: "qrc:/icons/saturation.svg" }
-                        Controls.ToolTip.text: i18n("Reset Saturation")
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onClicked: {
-                            processor.saturationFactor = 1.8
-                            previewDebounce.restart()
-                        }
-                    }
-                    Controls.Slider {
-                        id: satSlider
-                        Layout.fillWidth: true
-                        from: 0; to: 30; stepSize: 1
-                        value: processor.saturationFactor * 10
-                        Controls.ToolTip.text: i18n("%1×", processor.saturationFactor.toFixed(1))
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onMoved: processor.saturationFactor = value / 10.0
-                    }
-
-                    Controls.ToolButton {
-                        display: Controls.AbstractButton.IconOnly
-                        contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
-                        Controls.ToolTip.text: i18n("Reset Zoom")
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onClicked: {
-                            processor.bgZoom = 1.0
-                            previewDebounce.restart()
-                        }
-                    }
-                    Controls.Slider {
-                        id: zoomSlider
-                        Layout.fillWidth: true
-                        from: 5; to: 30; stepSize: 1
-                        value: Math.round(processor.bgZoom * 10)
-                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.bgZoom * 100))
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onMoved: processor.bgZoom = value / 10.0
-                    }
-
-                    Controls.ToolButton {
-                        display: Controls.AbstractButton.IconOnly
-                        contentItem: ThemedIcon { source: "qrc:/icons/rotation.svg" }
-                        Controls.ToolTip.text: i18n("Reset Rotation")
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onClicked: {
-                            processor.bgBlurAngle = 0.0
-                            previewDebounce.restart()
-                        }
-                    }
-                    Controls.Slider {
-                        id: bgRotSlider
-                        Layout.fillWidth: true
-                        from: 0; to: 360; stepSize: 1
-                        value: processor.bgBlurAngle
-                        Controls.ToolTip.text: i18n("%1°", processor.bgBlurAngle)
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onMoved: processor.bgBlurAngle = value
                     }
                 }
             }  // end of rightColumn
@@ -1524,6 +1679,7 @@ Kirigami.ApplicationWindow {
     function refreshPreviews() {
         var list = dropArea.fileList;
         if (list.length === 0) return;
+        previewContainer._pendingRenders = list.length;
         var cacheBust = "?t=" + Date.now();
         var entries = [];
         for (var i = 0; i < list.length; ++i) {
@@ -1543,7 +1699,7 @@ Kirigami.ApplicationWindow {
     // Live preview update on tweak changes (debounced)
     Timer {
         id: previewDebounce
-        interval: 700
+        interval: 300
         repeat: false
         onTriggered: refreshPreviews()
     }
@@ -1572,8 +1728,28 @@ Kirigami.ApplicationWindow {
 
     Connections {
         target: processor
+        function onPreviewReady(sourcePath, previewUrl) {
+            // Update the matching entry in fileList
+            var list = dropArea.fileList
+            for (var i = 0; i < list.length; ++i) {
+                if (list[i].path === sourcePath) {
+                    list[i].previewUrl = previewUrl
+                    break
+                }
+            }
+            dropArea.fileList = list
+            if (--previewContainer._pendingRenders < 0)
+                previewContainer._pendingRenders = 0
+            // If this is the first image's preview, crossfade immediately
+            if (dropArea.fileList.length > 0 && dropArea.fileList[0].path === sourcePath)
+                crossfadePreview(previewUrl)
+        }
         function onBlurRadiusChanged() { previewDebounce.restart(); }
         function onSaturationFactorChanged() { previewDebounce.restart(); }
+        function onOverlayOpacityChanged() { previewDebounce.restart(); }
+        function onOverlayColorChanged() { previewDebounce.restart(); }
+        function onBlurBrightnessChanged() { previewDebounce.restart(); }
+        function onBlurPresetIdChanged() { previewDebounce.restart(); }
         function onBgGradientStyleChanged() { previewDebounce.restart(); }
         function onBgGradientPresetChanged() { previewDebounce.restart(); }
         function onGradientAngleChanged() { previewDebounce.restart(); }

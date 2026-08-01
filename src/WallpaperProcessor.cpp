@@ -1,7 +1,17 @@
 #include "WallpaperProcessor.h"
+#include "blur_presets.h"
 
 #include <QPainter>
 #include <QScreen>
+#include <QElapsedTimer>
+#include <QDebug>
+#include <cstdio>
+
+// File-based profiler — writes to /tmp/walltz-profiler.log (unconditional, concurrent-safe)
+#define PROF_LOG(RENDER_ID, MSG, ...) do { \
+    FILE *pf = fopen("/tmp/walltz-profiler.log", "a"); \
+    if (pf) { fprintf(pf, "[PROF:%d] " MSG "\n", (RENDER_ID), ##__VA_ARGS__); fclose(pf); } \
+} while(0)
 #include <QGuiApplication>
 #include <QWindow>
 #include <QFileInfo>
@@ -10,6 +20,9 @@
 #include <cmath>
 #include <QPainterPath>
 #include <QDir>
+#include <QFile>
+#include <QDateTime>
+#include <QImageWriter>
 #include <QTimer>
 #include <QUrl>
 #include <QCryptographicHash>
@@ -17,6 +30,274 @@
 #include <vector>
 #include <functional>
 #include <KLocalizedString>
+
+// ── Render-parameter snapshot (captured by value for async background rendering) ──
+struct RenderSnapshot {
+    // Target
+    int W = 1920, H = 1080;
+    // Blur
+    bool blurMode = true;
+    double bgZoom = 1.0, bgBlurAngle = 0.0;
+    int blurRadius = 0;
+    double saturationFactor = 1.0;
+    double overlayOpacity = 0.0;
+    QRgb overlayColor = 0;
+    double blurBrightness = 1.0;
+    // Patterns
+    bool bgPatternEnabled = false;
+    int bgPatternType = 0;
+    QRgb bgPatternColor = 0xff787878;
+    double bgPatternScale = 1.0, bgPatternRotation = 0.0, bgPatternSpacing = 0.0;
+    bool bgPatternRandomRotate = false, bgPatternJitter = false;
+    double bgPatternGridAmplitude = 0.20;
+    bool bgPatternMixEnabled = false;
+    QList<int> bgPatternMixMotifs;
+    // Effects
+    double vignetteStrength = 0.0, grainStrength = 0.0, caStrength = 0.0;
+    bool photoFrame = false;
+    int photoFrameWidth = 0;
+    double fgZoom = 1.0;
+    double pipZoom = 1.0;
+    // Mood
+    bool useV2 = false;
+    // Source image (shallow-copied — cheap, no COW detach)
+    QImage sourceImage;
+    // Full-resolution foreground composition (as it would appear on the
+    // full wallpaper canvas). Used by the preview to render the foreground
+    // at the correct proportional position and size.
+    int fullImgW = 0, fullImgH = 0;
+    int fullCx = 0, fullCy = 0;
+    int fullCanvasW = 0, fullCanvasH = 0;  // m_targetWidth/m_targetHeight
+};
+
+/// Perform the full render pipeline using a captured snapshot (thread-safe).
+/// All parameter reads go through |rs|; no |this| access.
+static QImage renderFromSnapshot(const QImage &src, int W, int H,
+                                  const RenderSnapshot &rs,
+                                  const QImage &blurBuf,
+                                  double *outMinZoom = nullptr,
+                                  double *outMaxZoom = nullptr)
+{
+    // ── Almost identical to WallpaperProcessor::renderWallpaper, but reads rs.* ──
+    int imgW = src.width(), imgH = src.height();
+    double fillZoom = qMax(W / (double)imgW, H / (double)imgH);
+
+    // ── Self-similar composition: same ratio ρ at each nesting level ──
+    const double RHO = 0.05;                        // canvas margin (golden standard, fixed)
+    const double MIN_ZOOM = 0.5;                    // min border: picture shrinks to half golden size
+    double frameRatio = rs.photoFrame ? qBound(0.0, rs.photoFrameWidth / 100.0, 0.25) : 0.0;
+    int marginW = qMax(1, (int)(W * RHO));
+    int marginH = qMax(1, (int)(H * RHO));
+    int effW = W - 2 * marginW;
+    int effH = H - 2 * marginH;
+    double imgBudgetW = effW / (1.0 + 2.0 * frameRatio);
+    double imgBudgetH = effH / (1.0 + 2.0 * frameRatio);
+    double scaleF = qMin(imgBudgetW / qMax(1, imgW), imgBudgetH / qMax(1, imgH));
+    double gImgW = imgW * scaleF;                   // golden image size (zoom = 1.0)
+    double gImgH = imgH * scaleF;
+    double gFw = rs.photoFrame ? qMax(1.0, qMin(gImgW, gImgH) * frameRatio) : 0.0;
+    double gVisualW = gImgW + 2 * gFw;              // golden visual size (image + frame)
+    double gVisualH = gImgH + 2 * gFw;
+    double maxZoom = qMin(1.0, qMin(W / qMax(1.0, gVisualW), H / qMax(1.0, gVisualH))); // golden rect = max zoom ceiling; margin never consumed
+    if (outMinZoom) *outMinZoom = MIN_ZOOM;
+    if (outMaxZoom) *outMaxZoom = maxZoom;
+    double zoom = qBound(MIN_ZOOM, rs.fgZoom, maxZoom);
+    int pvW = qMax(1, (int)(gImgW * zoom));
+    int pvH = qMax(1, (int)(gImgH * zoom));
+    int effFw = rs.photoFrame
+        ? qMax(1, (int)(qMin(pvW, pvH) * frameRatio))
+        : 0;
+    int totalVisualW = pvW + 2 * effFw;
+    int totalVisualH = pvH + 2 * effFw;
+    int pvCx = (W - totalVisualW) / 2 + effFw;
+    int pvCy = (H - totalVisualH) / 2 + effFw;
+    double fgScale = (double)pvW / qMax(1, imgW);
+
+    QImage output(W, H, QImage::Format_ARGB32_Premultiplied);
+
+    QPainter p;
+    p.begin(&output);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+
+    constexpr int SHADOW_RADIUS = 3;  // match file-level statics
+    constexpr int FRAME_RADIUS  = 2;
+
+    if (rs.blurMode) {
+        double zoom = fillZoom * rs.bgZoom;
+
+        if (rs.bgZoom < 1.0) {
+            // extractHarmonizedColors reads member variables — skip for now,
+            // just fill with a neutral colour
+            output.fill(QColor(45, 45, 48));
+        } else {
+            output.fill(Qt::white);
+        }
+
+        double bgW = src.width() * zoom;
+        double bgH = src.height() * zoom;
+        p.save();
+        p.translate(W / 2.0, H / 2.0);
+        if (rs.bgBlurAngle != 0.0)
+            p.rotate(rs.bgBlurAngle);
+        p.translate(-bgW / 2.0, -bgH / 2.0);
+        p.scale(zoom, zoom);
+        p.drawImage(0, 0, src);
+        p.restore();
+        p.fillRect(0, 0, W, H, QColor(0, 0, 0, 25));
+        p.end();
+
+        // Use the local blur buffer (already blurred)
+        QImage localBlur = blurBuf;
+        if (localBlur.size() != output.size())
+            localBlur = output.copy();
+
+        double sigma = rs.blurRadius > 0
+            ? qMax(1.0, (double)rs.blurRadius)
+            : qMax(0.5, 0.017 * H);
+        WallpaperProcessor::stackBlur(localBlur, sigma,
+                                      rs.saturationFactor,
+                                      rs.overlayOpacity, rs.overlayColor,
+                                      rs.blurBrightness);
+
+        p.begin(&output);
+        p.drawImage(0, 0, localBlur);
+        p.end();
+    } else {
+        // Non-blur path: draw the source centred at proportional scale
+        // (painter already active from the begin above)
+        p.save();
+        p.translate(pvCx, pvCy);
+        p.scale(fgScale, fgScale);
+        p.drawImage(0, 0, src);
+        p.restore();
+        p.end();
+    }
+
+    // ── Pattern overlay ──
+    // Skipped in async preview (patterns are a niche feature, complex to snapshot)
+
+    // ── Vignette ──
+    if (rs.vignetteStrength > 0.001) {
+        p.begin(&output);
+        double radius = std::sqrt((W/2.0)*(W/2.0) + (H/2.0)*(H/2.0));
+        double s = rs.vignetteStrength;
+        QRadialGradient vg(W / 2.0, H / 2.0, radius);
+        vg.setColorAt(0.0, QColor(0, 0, 0, 0));
+        double fadeStart = 1.0 - 0.4 * s;
+        vg.setColorAt(fadeStart, QColor(0, 0, 0, 0));
+        int alpha = qMin(255, (int)(200 * s));
+        vg.setColorAt(1.0, QColor(0, 0, 0, alpha));
+        p.fillRect(0, 0, W, H, vg);
+        p.end();
+    }
+
+    // ── Grain ──
+    if (rs.grainStrength > 0.001) {
+        QImage grain(W, H, QImage::Format_Grayscale8);
+        int intensity = qMax(1, (int)(15 * rs.grainStrength));
+        for (int y = 0; y < H; ++y) {
+            unsigned char *line = grain.scanLine(y);
+            for (int x = 0; x < W; ++x)
+                line[x] = (unsigned char)(QRandomGenerator::global()->bounded(256)
+                    % (intensity * 2 + 1) - intensity + 128);
+        }
+        p.begin(&output);
+        p.save();
+        p.setCompositionMode(QPainter::CompositionMode_SoftLight);
+        p.drawImage(0, 0, grain);
+        p.restore();
+        p.end();
+    }
+
+    // ── Shadow ──
+    {
+        int shCx = pvCx, shCy = pvCy + 2, shW = pvW, shH = pvH;
+        if (rs.photoFrame) {
+            shCx = pvCx - effFw; shCy = pvCy - effFw + 2;
+            shW = pvW + 2*effFw; shH = pvH + 2*effFw;
+        }
+        QImage sh(W, H, QImage::Format_ARGB32_Premultiplied);
+        sh.fill(Qt::transparent);
+        QPainter sp(&sh);
+        sp.setRenderHint(QPainter::Antialiasing);
+        QPainterPath shPath;
+        shPath.addRoundedRect(shCx, shCy, shW, shH, SHADOW_RADIUS, SHADOW_RADIUS);
+        sp.fillPath(shPath, QColor(0, 0, 0, 102));
+        sp.end();
+        double shadowBlurSigma = qMax(0.5, 0.0046 * H / 3.0);
+        WallpaperProcessor::stackBlur(sh, shadowBlurSigma);
+        p.begin(&output);
+        p.drawImage(0, 0, sh);
+        p.end();
+    }
+
+    // ── Photo frame ──
+    if (rs.photoFrame) {
+        p.begin(&output);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setRenderHint(QPainter::SmoothPixmapTransform);
+        p.setPen(Qt::NoPen);
+        p.setBrush(Qt::white);
+        p.drawRoundedRect(pvCx - effFw, pvCy - effFw, pvW + 2*effFw, pvH + 2*effFw,
+                          FRAME_RADIUS, FRAME_RADIUS);
+        p.setPen(QPen(QColor(200, 200, 200), 1));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(pvCx - effFw, pvCy - effFw, pvW + 2*effFw, pvH + 2*effFw,
+                          FRAME_RADIUS, FRAME_RADIUS);
+        p.end();
+    }
+
+    // ── Foreground image with rounded clip ──
+    p.begin(&output);
+    int clipRadius = rs.photoFrame ? FRAME_RADIUS : SHADOW_RADIUS;
+    QPainterPath clipPath;
+    clipPath.addRoundedRect(pvCx, pvCy, pvW, pvH, clipRadius, clipRadius);
+    p.setClipPath(clipPath);
+    p.save();
+    // Single formula: content = rect (fgZoom) magnified inside the rect by pip.
+    // At pipZoom = 1.0 this is exactly the plain rect draw.
+    p.translate(pvCx + pvW / 2.0, pvCy + pvH / 2.0);
+    p.scale(fgScale * rs.pipZoom, fgScale * rs.pipZoom);
+    p.drawImage(-src.width() / 2.0, -src.height() / 2.0, src);
+    p.restore();
+    p.end();
+
+    // ── Chromatic aberration ──
+    if (rs.caStrength > 0.001) {
+        double maxShift = rs.caStrength * std::min(W, H) * 0.05;
+        double cxc = W / 2.0, cyc = H / 2.0;
+        double maxDist = std::sqrt(cxc * cxc + cyc * cyc);
+        QImage ca(W, H, QImage::Format_ARGB32_Premultiplied);
+        const int bpp = 4;
+        const int stride = output.bytesPerLine();
+        for (int y = 0; y < H; ++y) {
+            uchar *dstLine = ca.bits() + y * stride;
+            for (int x = 0; x < W; ++x) {
+                double dx = (x - cxc) / maxDist;
+                double dy = (y - cyc) / maxDist;
+                double dist = std::sqrt(dx * dx + dy * dy);
+                int shift = (int)(dist * maxShift);
+                int sx = (int)(dx * shift);
+                int sy = (int)(dy * shift);
+                int rx = qBound(0, x + sx, W - 1);
+                int ry = qBound(0, y + sy, H - 1);
+                int bx = qBound(0, x - sx, W - 1);
+                int by = qBound(0, y - sy, H - 1);
+                const uchar *srcPx = output.constBits() + y * stride + x * bpp;
+                const uchar *rPx   = output.constBits() + ry * stride + rx * bpp;
+                const uchar *bPx   = output.constBits() + by * stride + bx * bpp;
+                uchar *dst = dstLine + x * bpp;
+                dst[0] = bPx[0];
+                dst[1] = srcPx[1];
+                dst[2] = rPx[2];
+                dst[3] = srcPx[3];
+            }
+        }
+        output = ca;
+    }
+
+    return output;
+}
 
 static const int SHADOW_RADIUS = 3;
 static const int FRAME_RADIUS = 2;  // photo frame corner radius (small, paper-like)
@@ -440,6 +721,26 @@ void WallpaperProcessor::setPhotoFrameWidth(int w)
     }
 }
 
+void WallpaperProcessor::setFgZoom(double z)
+{
+    // Superset of slider ranges (rect: 0.5..1.0, pip: 1.0..4.0).
+    // The render clamps to the true per-path limits.
+    z = qBound(0.5, z, 4.0);
+    if (!qFuzzyCompare(m_fgZoom, z)) {
+        m_fgZoom = z;
+        Q_EMIT fgZoomChanged();
+    }
+}
+
+void WallpaperProcessor::setPipZoom(double z)
+{
+    z = qBound(1.0, z, 4.0);
+    if (!qFuzzyCompare(m_pipZoom, z)) {
+        m_pipZoom = z;
+        Q_EMIT pipZoomChanged();
+    }
+}
+
 // ── Pattern property setters ─────────────────────────────────────────────
 
 void WallpaperProcessor::setBgPatternEnabled(bool on)
@@ -577,7 +878,7 @@ void WallpaperProcessor::setWindow(QWindow *window)
         // Poll for fractional DPR arrival (Qt emits no signal for this
         // on Qt < 6.8).  Poll every second indefinitely so the correct
         // scale is always picked up, even when it arrives late.
-        QTimer::singleShot(1000, this, &WallpaperProcessor::pollDpr);
+        QTimer::singleShot(5000, this, &WallpaperProcessor::pollDpr);
     }
 }
 
@@ -591,9 +892,8 @@ void WallpaperProcessor::pollDpr()
         Q_EMIT windowDprChanged();
         detectFromWindow();
     }
-    // Keep polling while the app lives; no bounded limit — fractional DPR
-    // on Wayland can arrive unpredictably late (seconds not ms).
-    QTimer::singleShot(1000, this, &WallpaperProcessor::pollDpr);
+    // Poll every 5 s; late DPR on Wayland can arrive well after startup.
+    QTimer::singleShot(5000, this, &WallpaperProcessor::pollDpr);
 }
 
 void WallpaperProcessor::setKeepAbove(bool keep)
@@ -781,7 +1081,8 @@ QImage WallpaperProcessor::limitImageSize(const QImage &src, int maxW, int maxH)
         imgW = imgW * 2 / 5;
         imgH = imgH * 2 / 5;
     }
-    return src.scaled(imgW, imgH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return src.scaled(qMax(maxW, imgW), qMax(maxH, imgH),
+                      Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
 // ── core image processing ────────────────────────────────────────────────
@@ -814,12 +1115,51 @@ bool WallpaperProcessor::processSingleImage(const QString &sourcePath, QString &
 
 // ── render pipeline (shared between full output and preview) ────────────
 
-QImage WallpaperProcessor::renderWallpaper(const QImage &src, int W, int H)
+QImage WallpaperProcessor::renderWallpaper(const QImage &src, int W, int H, bool)
 {
+    // Refresh image stats for Smart Auto (only needed for Auto preset)
+    if (m_blurPresetId == QStringLiteral("auto")) {
+        blockSignals(true);
+        m_imageStats = analyseImage(src);
+        m_statsValid = true;
+        computeSmartAutoAndApply();
+        blockSignals(false);
+    }
+
     int imgW = src.width(), imgH = src.height();
-    int cx = qMax(0, (W - imgW) / 2);
-    int cy = qMax(0, (H - imgH) / 2);
+    int cx = 0, cy = 0;
     double fillZoom = qMax(W / (double)imgW, H / (double)imgH);
+
+    // ── Self-similar composition: same ratio ρ at each nesting level ──
+    const double RHO = 0.05;                        // canvas margin (golden standard, fixed)
+    const double MIN_ZOOM = 0.5;                    // min border: picture shrinks to half golden size
+    double frameRatio = m_photoFrame ? qBound(0.0, m_photoFrameWidth / 100.0, 0.25) : 0.0;
+    int marginW = qMax(1, (int)(W * RHO));
+    int marginH = qMax(1, (int)(H * RHO));
+    int effW = W - 2 * marginW;
+    int effH = H - 2 * marginH;
+    double imgBudgetW = effW / (1.0 + 2.0 * frameRatio);
+    double imgBudgetH = effH / (1.0 + 2.0 * frameRatio);
+    double scaleF = qMin(imgBudgetW / qMax(1, imgW), imgBudgetH / qMax(1, imgH));
+    double gImgW = imgW * scaleF;                   // golden image size (zoom = 1.0)
+    double gImgH = imgH * scaleF;
+    double gFw = m_photoFrame ? qMax(1.0, qMin(gImgW, gImgH) * frameRatio) : 0.0;
+    double gVisualW = gImgW + 2 * gFw;              // golden visual size (image + frame)
+    double gVisualH = gImgH + 2 * gFw;
+    double maxZoom = qMin(1.0, qMin(W / qMax(1.0, gVisualW), H / qMax(1.0, gVisualH))); // golden rect = max zoom ceiling; margin never consumed
+    double zoom = qBound(MIN_ZOOM, m_fgZoom, maxZoom);
+    imgW = qMax(1, (int)(gImgW * zoom));
+    imgH = qMax(1, (int)(gImgH * zoom));
+    int effFw = m_photoFrame
+        ? qMax(1, (int)(qMin(imgW, imgH) * frameRatio))
+        : 0;
+    int totalVisualW = imgW + 2 * effFw;
+    int totalVisualH = imgH + 2 * effFw;
+    cx = (W - totalVisualW) / 2 + effFw;
+    cy = (H - totalVisualH) / 2 + effFw;
+    m_fgZoomMin = MIN_ZOOM;
+    m_fgZoomMax = maxZoom;
+    Q_EMIT fgZoomBoundsChanged();
 
     QImage output(W, H, QImage::Format_ARGB32_Premultiplied);
 
@@ -860,8 +1200,8 @@ QImage WallpaperProcessor::renderWallpaper(const QImage &src, int W, int H)
         double sigma = m_blurRadius > 0
             ? qMax(1.0, (double)m_blurRadius)       // manual: sigma = slider value (1-120)
             : qMax(0.5, 0.017 * H);                 // auto:  sigma ≈ 18 at 1080p
-        stackBlur(m_blurBuf, sigma);
-        boostSaturation(m_blurBuf, m_saturationFactor);
+        stackBlur(m_blurBuf, sigma, m_saturationFactor,
+                  m_overlayOpacity, m_overlayColor.rgb(), m_blurBrightness);
 
         p.begin(&output);
         p.drawImage(0, 0, m_blurBuf);
@@ -912,9 +1252,8 @@ QImage WallpaperProcessor::renderWallpaper(const QImage &src, int W, int H)
     // ── Shadow (expands to include photo frame when enabled) ──
     int shCx = cx, shCy = cy + 2, shW = imgW, shH = imgH;
     if (m_photoFrame) {
-        int fw = m_photoFrameWidth;
-        shCx = cx - fw; shCy = cy - fw + 2;
-        shW = imgW + 2*fw; shH = imgH + 2*fw;
+        shCx = cx - effFw; shCy = cy - effFw + 2;
+        shW = imgW + 2*effFw; shH = imgH + 2*effFw;
     }
     QImage sh(W, H, QImage::Format_ARGB32_Premultiplied);
     sh.fill(Qt::transparent);
@@ -930,17 +1269,16 @@ QImage WallpaperProcessor::renderWallpaper(const QImage &src, int W, int H)
 
     // ── Photo frame (scale proportionally to output size) ──
     if (m_photoFrame) {
-        int fw = qMax(2, (int)(m_photoFrameWidth * std::min(W, H) / 500.0));
         p.setRenderHint(QPainter::Antialiasing);
         p.setRenderHint(QPainter::SmoothPixmapTransform);
         p.setPen(Qt::NoPen);
         p.setBrush(Qt::white);
-        p.drawRoundedRect(cx - fw, cy - fw, imgW + 2*fw, imgH + 2*fw,
+        p.drawRoundedRect(cx - effFw, cy - effFw, imgW + 2*effFw, imgH + 2*effFw,
                           FRAME_RADIUS, FRAME_RADIUS);
         // Thin outer border on the frame
         p.setPen(QPen(QColor(200, 200, 200), 1));
         p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(cx - fw, cy - fw, imgW + 2*fw, imgH + 2*fw,
+        p.drawRoundedRect(cx - effFw, cy - effFw, imgW + 2*effFw, imgH + 2*effFw,
                           FRAME_RADIUS, FRAME_RADIUS);
     }
 
@@ -952,7 +1290,14 @@ QImage WallpaperProcessor::renderWallpaper(const QImage &src, int W, int H)
     int clipRadius = m_photoFrame ? FRAME_RADIUS : SHADOW_RADIUS;
     clipPath.addRoundedRect(cx, cy, imgW, imgH, clipRadius, clipRadius);
     p.setClipPath(clipPath);
-    p.drawImage(cx, cy, src);
+    p.save();
+    // Single formula: content = rect (fgZoom) magnified inside the rect by pip.
+    // At pipZoom = 1.0 this is exactly the plain rect draw.
+    p.translate(cx + imgW / 2.0, cy + imgH / 2.0);
+    p.scale(imgW / (double)src.width() * m_pipZoom,
+            imgH / (double)src.height() * m_pipZoom);
+    p.drawImage(-src.width() / 2.0, -src.height() / 2.0, src);
+    p.restore();
     p.restore();
     p.end();
 
@@ -1004,34 +1349,186 @@ QImage WallpaperProcessor::renderWallpaper(const QImage &src, int W, int H)
 
 QString WallpaperProcessor::generatePreview(const QString &sourcePath)
 {
-    QImage srcImage(sourcePath);
-    if (srcImage.isNull()) return {};
+    QElapsedTimer t_total; t_total.start();
+    int renderId = m_nextRenderId.fetchAndAddAcquire(1);
 
-    // Use full target resolution so the preview matches the final output exactly.
-    // The QML Image element downscales both the live preview and the post-process
-    // .wp.png identically via PreserveAspectFit.
-    int W = m_targetWidth;
-    int H = m_targetHeight;
+    // Snapshot all render parameters that the background thread needs
+    RenderSnapshot rs;
+    // Cap preview resolution: full pipeline runs at this size,
+    // which gets scaled down to widget size by QML.
+    // 600px is plenty for a thumb-preview — ~36x fewer pixels than 4K.
+    int maxPv = 600;
+    double aspect = (double)m_targetWidth / qMax(1, m_targetHeight);
+    if (aspect > 1.0) {
+        rs.W = maxPv;
+        rs.H = qMax(1, (int)(maxPv / aspect));
+    } else {
+        rs.H = maxPv;
+        rs.W = qMax(1, (int)(maxPv * aspect));
+    }
+    rs.blurMode               = m_blurMode;
+    rs.bgZoom                 = m_bgZoom;
+    rs.bgBlurAngle            = m_bgBlurAngle;
+    rs.blurRadius             = m_blurRadius;
+    rs.saturationFactor       = m_saturationFactor;
+    rs.overlayOpacity         = m_overlayOpacity;
+    rs.overlayColor           = m_overlayColor.rgb();
+    rs.blurBrightness         = m_blurBrightness;
+    rs.bgPatternEnabled       = m_bgPatternEnabled;
+    rs.bgPatternType          = m_bgPatternType;
+    rs.bgPatternColor         = m_bgPatternColor.rgb();
+    rs.bgPatternScale         = m_bgPatternScale;
+    rs.bgPatternRotation      = m_bgPatternRotation;
+    rs.bgPatternSpacing       = m_bgPatternSpacing;
+    rs.bgPatternRandomRotate  = m_bgPatternRandomRotate;
+    rs.bgPatternJitter        = m_bgPatternJitter;
+    rs.bgPatternGridAmplitude = m_bgPatternGridAmplitude;
+    rs.bgPatternMixEnabled    = m_bgPatternMixEnabled;
+    rs.bgPatternMixMotifs     = m_bgPatternMixMotifs;
+    rs.vignetteStrength       = m_vignetteStrength;
+    rs.grainStrength          = m_grainStrength;
+    rs.caStrength             = m_caStrength;
+    rs.photoFrame             = m_photoFrame;
+    rs.photoFrameWidth        = m_photoFrameWidth;
+    rs.fgZoom                 = m_fgZoom;
+    rs.pipZoom                = m_pipZoom;
+    rs.useV2                  = m_useV2;
 
-    // Scale source down if oversized (same logic as processSingleImage)
-    srcImage = WallpaperProcessor::limitImageSize(srcImage, W, H);
+    // Load the source image once and pass it through the snapshot
+    QImage src(sourcePath);
+    PROF_LOG(renderId, "QImage::load %lld ms", t_total.elapsed());
+    rs.sourceImage = src;
 
-    // Pre-compute mood palettes from the source image for QML display
-    m_moodsComputed = false;
-    computeMoodPalettes(srcImage);
+    // If Smart Auto is active, run fresh analysis so the snapshot captures correct values
+    if (m_blurPresetId == QStringLiteral("auto")) {
+        if (!src.isNull()) {
+            blockSignals(true);
+            m_imageStats = analyseImage(src);
+            PROF_LOG(renderId, "analyseImage %lld ms", t_total.elapsed());
+            m_statsValid = true;
+            computeSmartAutoAndApply();
+            blockSignals(false);
+            // Re-copy auto-updated values into snapshot
+            rs.blurRadius       = m_blurRadius;
+            rs.saturationFactor = m_saturationFactor;
+            rs.overlayOpacity   = m_overlayOpacity;
+            rs.overlayColor     = m_overlayColor.rgb();
+            rs.blurBrightness   = m_blurBrightness;
+        }
+    }
 
-    QImage preview = renderWallpaper(srcImage, W, H);
+    // Scale blur radius to match preview size so visual effect is identical
+    // to the full-resolution render. All other spatial effects (vignette,
+    // CA, shadow, frame) already compute relative to W/H internally.
+    // Must happen AFTER any Auto re-copy above.
+    rs.blurRadius *= (double)qMax(rs.W, rs.H) / qMax(m_targetWidth, m_targetHeight);
 
-    // Save to temp (deterministic filename — old preview overwritten on re-gen)
+    // Compute full-resolution foreground composition: where would the source
+    // appear on the full wallpaper canvas after limitImageSize at target size?
+    {
+        int sw = src.width(), sh = src.height();
+        int tw = m_targetWidth, th = m_targetHeight;
+        rs.fullImgW = sw;
+        rs.fullImgH = sh;
+        if (sw > tw || sh > th) {
+            double ratio = qMin((double)tw / sw, (double)th / sh);
+            rs.fullImgW = qMax(1, (int)(sw * ratio));
+            rs.fullImgH = qMax(1, (int)(sh * ratio));
+        }
+        rs.fullCx = qMax(0, (tw - rs.fullImgW) / 2);
+        rs.fullCy = qMax(0, (th - rs.fullImgH) / 2);
+        rs.fullCanvasW = tw;
+        rs.fullCanvasH = th;
+    }
+
+    // Fast synchronous work: compute mood palettes for QML UI (<1ms)
+    if (!src.isNull())
+        computeMoodPalettes(src);
+    PROF_LOG(renderId, "moodPalettes+snapshot %lld ms", t_total.elapsed());
+
+    // Copy source path and compute temp path on the calling thread
+    QFileInfo fi(sourcePath);
     QString tmpDir = QDir::tempPath() + QStringLiteral("/walltz");
     QDir().mkpath(tmpDir);
-    QString tmpName = QStringLiteral("pv_")
-        + QString::fromLatin1(QCryptographicHash::hash(sourcePath.toUtf8(), QCryptographicHash::Md5).toHex().left(16))
+    QString sourceHash = QString::fromLatin1(QCryptographicHash::hash(
+        sourcePath.toUtf8(), QCryptographicHash::Md5).toHex().left(16));
+    QString tmpName = QStringLiteral("pv_") + sourceHash
+        + QStringLiteral("_") + QString::number(renderId)
         + QStringLiteral(".png");
     QString tmpPath = tmpDir + QDir::separator() + tmpName;
-    if (!preview.save(tmpPath, "PNG")) return {};
 
-    return QStringLiteral("file://") + tmpPath;
+    // Run the full render pipeline on a background thread (fire-and-forget;
+    // the QFuture is intentionally discarded — the task owns itself)
+    Q_UNUSED(QtConcurrent::run([this, sourcePath, tmpPath, tmpName, sourceHash, tmpDir, rs, renderId]() {
+        QElapsedTimer t_lambda; t_lambda.start();
+        QImage srcImage = rs.sourceImage;
+        if (srcImage.isNull()) {
+            PROF_LOG(renderId, "%s", "LAMBDA src is NULL");
+            return;
+        }
+
+        // Scale source down if oversized
+        srcImage = WallpaperProcessor::limitImageSize(srcImage, rs.W, rs.H);
+        PROF_LOG(renderId, "limitImageSize %lld ms", t_lambda.elapsed());
+
+        // Render using the snapshot (thread-safe — no |this| member reads)
+        double minZoom = 0.5, maxZoom = 1.0;
+        QImage preview = renderFromSnapshot(srcImage, rs.W, rs.H, rs, QImage(),
+                                            &minZoom, &maxZoom);
+        PROF_LOG(renderId, "renderFromSnapshot %lld ms", t_lambda.elapsed());
+
+        // Fast PNG write: compression=0 (store raw, ~5ms instead of 100-200ms)
+        QImageWriter writer(tmpPath, "png");
+        writer.setCompression(0);
+        if (!writer.write(preview)) {
+            PROF_LOG(renderId, "%s", "QImageWriter::write FAILED");
+            return;
+        }
+        PROF_LOG(renderId, "QImageWriter::write %lld ms", t_lambda.elapsed());
+
+        QString url = QStringLiteral("file://") + tmpPath;
+
+        // Purge stale files for this source (same hash, older render IDs)
+        QDir dir(tmpDir);
+        QStringList filters;
+        filters << QStringLiteral("pv_") + sourceHash + QStringLiteral("_*.png");
+        for (const QString &fn : dir.entryList(filters, QDir::Files, QDir::Name)) {
+            if (fn != tmpName) {
+                QString fp = dir.absoluteFilePath(fn);
+                // Extract render ID from filename: pv_<hash>_<N>.png
+                int underscore = fn.lastIndexOf(QLatin1Char('_'));
+                int dot = fn.lastIndexOf(QLatin1Char('.'));
+                if (underscore > 0 && dot > underscore) {
+                    bool ok = false;
+                    int oldId = fn.mid(underscore + 1, dot - underscore - 1).toInt(&ok);
+                    if (ok && oldId <= renderId)
+                        QFile::remove(fp);
+                }
+            }
+        }
+
+        // Deliver result back on the main thread
+        QElapsedTimer t_invoke;
+        t_invoke.start();
+        QMetaObject::invokeMethod(this, [this, sourcePath, url, renderId, t_invoke, minZoom, maxZoom]() {
+            PROF_LOG(renderId, "invokeMethod->main %lld ms", t_invoke.elapsed());
+            if (renderId < m_currentRenderId) {
+                PROF_LOG(renderId, "-> STALE (current=%d)", m_currentRenderId);
+                return;
+            }
+            m_currentRenderId = renderId;
+            m_lastPreviewUrl = url;
+            // Keep slider range in sync with what the preview actually clamps to
+            m_fgZoomMin = minZoom;
+            m_fgZoomMax = maxZoom;
+            Q_EMIT fgZoomBoundsChanged();
+            Q_EMIT previewReady(sourcePath, url);
+        }, Qt::QueuedConnection);
+    }));
+
+    // Return the last-known-good URL immediately (UI never blocks)
+    PROF_LOG(renderId, "generatePreview returns %lld ms", t_total.elapsed());
+    return m_lastPreviewUrl;
 }
 
 // ── Pattern rendering ────────────────────────────────────────────────────
@@ -2389,7 +2886,7 @@ QString WallpaperProcessor::moodNameV2(int index) const
 // making this O(w*h) regardless of radius.
 //
 // Multi-threaded: horizontal pass farms out rows, vertical pass farms out
-// columns, via QtConcurrent::blockingMap (uses all CPU cores).
+// columns.
 
 void WallpaperProcessor::boxBlurH(QImage &dst, const QImage &src, int radius)
 {
@@ -2437,10 +2934,10 @@ void WallpaperProcessor::boxBlurH(QImage &dst, const QImage &src, int radius)
         }
     };
 
+
     // Parallelize over all rows
-    QList<int> rows(h);
-    std::iota(rows.begin(), rows.end(), 0);
-    QtConcurrent::blockingMap(rows, rowOp);
+    for (int y = 0; y < h; ++y)
+        rowOp(y);
 }
 
 void WallpaperProcessor::boxBlurV(QImage &dst, const QImage &src, int radius)
@@ -2487,30 +2984,185 @@ void WallpaperProcessor::boxBlurV(QImage &dst, const QImage &src, int radius)
     };
 
     // Parallelize over all columns
-    QList<int> cols(w);
-    std::iota(cols.begin(), cols.end(), 0);
-    QtConcurrent::blockingMap(cols, colOp);
+    for (int x = 0; x < w; ++x)
+        colOp(x);
 }
 
-/// Convert sigma to 3 box-blur radii (Ivan Kutskir / Peter Kovesi method)
-/// Three box blurs approximate a Gaussian via the Central Limit Theorem.
-static void sigmaToBoxes(int boxes[3], double sigma)
+/// True separable Gaussian blur — horizontal pass.
+///
+/// Kernel truncated at ±3σ.  Double-precision accumulation for accuracy
+/// in the tails.  No intermediate rounding — output stored as float.
+static void gaussianBlurH(float *dst, const float *src, int w, int h, double sigma)
 {
-    double n = 3.0;                     // 3 box passes = good Gaussian approx
-    double wi = std::sqrt((12.0 * sigma * sigma / n) + 1.0);
-    int wl = (int)std::floor(wi);
-    if (wl % 2 == 0) --wl;
-    int wu = wl + 2;
+    int kSize = qMax(3, (int)std::ceil(3.0 * sigma));
+    if ((kSize & 1) == 0) ++kSize;            // odd kernel
+    int radius = kSize / 2;
+    double sigmaSq2 = 2.0 * sigma * sigma;
 
-    double mi = (12.0 * sigma * sigma - n * wl * wl - 4.0 * n * wl - 3.0 * n)
-                / (-4.0 * wl - 4.0);
-    int m = (int)std::round(mi);
+    // Precompute normalized Gaussian kernel
+    std::vector<double> kernel(kSize);
+    double sum = 0.0;
+    for (int i = 0; i < kSize; ++i) {
+        int x = i - radius;
+        kernel[i] = std::exp(-(double)(x * x) / sigmaSq2);
+        sum += kernel[i];
+    }
+    double invSum = 1.0 / sum;
+    for (int i = 0; i < kSize; ++i)
+        kernel[i] *= invSum;
 
-    for (int i = 0; i < 3; ++i)
-        boxes[i] = ((i < m ? wl : wu) - 1) / 2;
+    for (int y = 0; y < h; ++y) {
+        const float *sRow = src + y * w * 4;
+        float *dRow = dst + y * w * 4;
+        for (int x = 0; x < w; ++x) {
+            double c[4] = {0};
+            for (int k = 0; k < kSize; ++k) {
+                int sx = std::clamp(x + k - radius, 0, w - 1);
+                const float *p = sRow + sx * 4;
+                double kw = kernel[k];
+                c[0] += p[0] * kw;
+                c[1] += p[1] * kw;
+                c[2] += p[2] * kw;
+                c[3] += p[3] * kw;
+            }
+            float *dp = dRow + x * 4;
+            dp[0] = (float)c[0];
+            dp[1] = (float)c[1];
+            dp[2] = (float)c[2];
+            dp[3] = (float)c[3];
+        }
+    }
 }
 
-void WallpaperProcessor::stackBlur(QImage &image, double sigma)
+/// True separable Gaussian blur — vertical pass.
+static void gaussianBlurV(float *dst, const float *src, int w, int h, double sigma)
+{
+    int kSize = qMax(3, (int)std::ceil(3.0 * sigma));
+    if ((kSize & 1) == 0) ++kSize;
+    int radius = kSize / 2;
+    double sigmaSq2 = 2.0 * sigma * sigma;
+
+    // Precompute normalized Gaussian kernel (same as H)
+    std::vector<double> kernel(kSize);
+    double sum = 0.0;
+    for (int i = 0; i < kSize; ++i) {
+        int y = i - radius;
+        kernel[i] = std::exp(-(double)(y * y) / sigmaSq2);
+        sum += kernel[i];
+    }
+    double invSum = 1.0 / sum;
+    for (int i = 0; i < kSize; ++i)
+        kernel[i] *= invSum;
+
+    int stride = w * 4;
+    for (int x = 0; x < w; ++x) {
+        const float *sBase = src + x * 4;
+        float *dBase = dst + x * 4;
+        for (int y = 0; y < h; ++y) {
+            double c[4] = {0};
+            for (int k = 0; k < kSize; ++k) {
+                int sy = std::clamp(y + k - radius, 0, h - 1);
+                const float *p = sBase + sy * stride;
+                double kw = kernel[k];
+                c[0] += p[0] * kw;
+                c[1] += p[1] * kw;
+                c[2] += p[2] * kw;
+                c[3] += p[3] * kw;
+            }
+            float *dp = dBase + y * stride;
+            dp[0] = (float)c[0];
+            dp[1] = (float)c[1];
+            dp[2] = (float)c[2];
+            dp[3] = (float)c[3];
+        }
+    }
+}
+
+/// Convert QImage ARGB32_Premultiplied to float[4] array.
+static void imageToFloat(const QImage &img, float *buf)
+{
+    int w = img.width(), h = img.height();
+    int bpl = img.bytesPerLine();
+    for (int y = 0; y < h; ++y) {
+        const uchar *row = img.constBits() + y * bpl;
+        float *fRow = buf + y * w * 4;
+        for (int x = 0; x < w; ++x) {
+            fRow[x*4]   = (float)row[x*4];
+            fRow[x*4+1] = (float)row[x*4+1];
+            fRow[x*4+2] = (float)row[x*4+2];
+            fRow[x*4+3] = (float)row[x*4+3];
+        }
+    }
+}
+
+/// Convert float[4] array back to QImage via 8×8 Bayer ordered dither.
+///
+/// Bayer matrix threshold is applied per-pixel before rounding, breaking up
+/// contour bands into a deterministic blue-noise pattern.  The 8×8 Bayer has
+/// 64 distinct threshold levels, giving ~2 extra bits of effective precision
+/// for the gradient.  Parallel, deterministic, zero chroma splatter.
+static void floatToImageDithered(const float *buf, QImage &img)
+{
+    // Bayer 8×8 threshold matrix (values 0..63, 64 levels of dither)
+    static const uchar bayer[8][8] = {
+        {  0, 48, 12, 60,  3, 51, 15, 63 },
+        { 32, 16, 44, 28, 35, 19, 47, 31 },
+        {  8, 56,  4, 52, 11, 59,  7, 55 },
+        { 40, 24, 36, 20, 43, 27, 39, 23 },
+        {  2, 50, 14, 62,  1, 49, 13, 61 },
+        { 34, 18, 46, 30, 33, 17, 45, 29 },
+        { 10, 58,  6, 54,  9, 57,  5, 53 },
+        { 42, 26, 38, 22, 41, 25, 37, 21 }
+    };
+
+    int w = img.width(), h = img.height();
+    int bpl = img.bytesPerLine();
+    const float inv64 = 1.0f / 64.0f;
+
+    for (int y = 0; y < h; ++y) {
+        uchar *row = img.bits() + y * bpl;
+        const float *fRow = buf + y * w * 4;
+        const uchar *bRow = bayer[y & 7];
+        for (int x = 0; x < w; ++x) {
+            const float *p = fRow + x * 4;
+            float t = (float)bRow[x & 7] * inv64;  // 0..63/64
+            for (int c = 0; c < 4; ++c) {
+                float v = std::clamp(p[c], 0.0f, 255.0f);
+                // floor(v + t) = (int)(v + t) for positive v
+                row[x*4 + c] = (uchar)qMin((int)(v + t), 255);
+            }
+        }
+    }
+}
+
+/// Float-precision saturation boost (in-place on float[4] buffer).
+/// Replaces 8-bit version to avoid double-quantization bugs.
+static void boostSaturationFloat(float *buf, int nPix, double factor)
+{
+    float f = (float)factor;
+    for (int i = 0; i < nPix; ++i) {
+        float *p = buf + i * 4;
+        float b = p[0], g = p[1], r = p[2];
+        float gray = (r + g + b) * (1.0f / 3.0f);
+        p[0] = std::max(0.0f, std::min(255.0f, gray + (b - gray) * f));
+        p[1] = std::max(0.0f, std::min(255.0f, gray + (g - gray) * f));
+        p[2] = std::max(0.0f, std::min(255.0f, gray + (r - gray) * f));
+        // p[3] alpha unchanged
+    }
+}
+
+/// Full-resolution true separable Gaussian blur + saturation boost in float.
+///
+/// Pipeline: image → float → Gaussian blur → saturation boost (float) →
+/// Bayer ordered-dithered 8-bit.  Single quantisation at the end.
+///
+/// The saturation boost is merged into the float pipeline to avoid the
+/// two-quantization bug: previous code quantized to 8-bit after blur, then
+/// boostSaturation re-quantized via integer gray division + truncation.
+/// This double quantization created regular 2px stair-step contour "waves"
+/// that the saturation boost amplified.
+void WallpaperProcessor::stackBlur(QImage &image, double sigma, double saturationFactor,
+                                    double overlayOpacity, QRgb overlayColor, double brightness)
 {
     if (sigma < 0.5 || image.isNull()) return;
     if (image.format() != QImage::Format_ARGB32_Premultiplied)
@@ -2519,23 +3171,48 @@ void WallpaperProcessor::stackBlur(QImage &image, double sigma)
     int w = image.width(), h = image.height();
     if (w < 1 || h < 1) return;
 
-    // Three box radii approximating a Gaussian of the requested sigma
-    int boxes[3];
-    sigmaToBoxes(boxes, sigma);
+    int nPix = w * h;
+    std::vector<float> buf1(nPix * 4);
+    std::vector<float> buf2(nPix * 4);
+    imageToFloat(image, buf1.data());
 
-    // Temp buffer for intermediate results
-    QImage tmp(w, h, QImage::Format_ARGB32_Premultiplied);
+    // Two-pass separable true Gaussian convolution
+    gaussianBlurH(buf2.data(), buf1.data(), w, h, sigma);
+    gaussianBlurV(buf1.data(), buf2.data(), w, h, sigma);
 
-    // Apply 3 box blur passes (each = H + V).
-    // Each pass always: read from image → H → tmp → V → image
-    // This avoids the stale-buffer bug: tmp is always overwritten with
-    // the fresh H result before V reads it.
-    for (int pass = 0; pass < 3; ++pass) {
-        int r = boxes[pass];
-        if (r < 1) r = 1;
-        boxBlurH(tmp, image, r);   // H: image → tmp (parallel)
-        boxBlurV(image, tmp, r);   // V: tmp  → image (parallel)
+    // Float saturation boost (in float, before quantization)
+    if (saturationFactor > 0.001 && std::abs(saturationFactor - 1.0) > 0.001)
+        boostSaturationFloat(buf1.data(), nPix, saturationFactor);
+
+    // Overlay composite (alpha blend, in float pipeline before dither)
+    if (overlayOpacity > 0.001f) {
+        float fr = (float)((overlayColor >> 16) & 0xFF);
+        float fg = (float)((overlayColor >> 8) & 0xFF);
+        float fb = (float)(overlayColor & 0xFF);
+        float a  = (float)qBound(0.0, overlayOpacity, 1.0);
+        float ia = 1.0f - a;
+        for (int i = 0; i < nPix; ++i) {
+            float *p = buf1.data() + i * 4;
+            p[0] = p[0] * ia + fb * a;   // B
+            p[1] = p[1] * ia + fg * a;   // G
+            p[2] = p[2] * ia + fr * a;   // R
+            // p[3] alpha unchanged
+        }
     }
+
+    // Brightness multiplication (in float, before dither)
+    if (std::abs(brightness - 1.0) > 0.001) {
+        float b = (float)brightness;
+        for (int i = 0; i < nPix; ++i) {
+            float *p = buf1.data() + i * 4;
+            p[0] = std::min(p[0] * b, 255.0f);
+            p[1] = std::min(p[1] * b, 255.0f);
+            p[2] = std::min(p[2] * b, 255.0f);
+        }
+    }
+
+    // Single dithered quantise to 8-bit
+    floatToImageDithered(buf1.data(), image);
 }
 
 // ── pre-generated noise texture ──────────────────────────────────────────
@@ -2564,32 +3241,128 @@ void WallpaperProcessor::ensureNoiseTexture(int w, int h)
     }
 }
 
-// ── saturation boost (backgroundifier: 1.8x) ───────────────────────────
-//
-// Quick approximation: scale each channel's distance from gray.
-//   gray = (R + G + B) / 3
-//   channel = gray + (channel - gray) * factor
-//
-// This avoids full HSL conversion while producing a nearly identical result.
-// Uses qRed/qGreen/qBlue for endian-safe pixel access.
+// ── Blur preset methods ─────────────────────────────────────────────
 
-void WallpaperProcessor::boostSaturation(QImage &image, double factor)
+void WallpaperProcessor::setBlurPresetIndex(int index)
 {
-    if (qFuzzyCompare(factor, 1.0) || image.isNull()) return;
-    int w = image.width(), h = image.height();
-    int bpl = image.bytesPerLine();
-    uchar *data = image.bits();
-
-    for (int y = 0; y < h; ++y) {
-        QRgb *row = reinterpret_cast<QRgb*>(data + y * bpl);
-        for (int x = 0; x < w; ++x) {
-            QRgb px = row[x];
-            int r = qRed(px), g = qGreen(px), b = qBlue(px);
-            int gray = (r + g + b) / 3;
-            int nr = std::clamp((int)(gray + (r - gray) * factor), 0, 255);
-            int ng = std::clamp((int)(gray + (g - gray) * factor), 0, 255);
-            int nb = std::clamp((int)(gray + (b - gray) * factor), 0, 255);
-            row[x] = qRgba(nr, ng, nb, qAlpha(px));
-        }
+    if (index < 0 || index >= blurPresetCount()) {
+        index = 0;
     }
+    if (index == static_cast<int>(BlurPresetId::Auto)) {
+        computeSmartAutoAndApply();
+        return;
+    }
+    const auto &cfg = ::blurPresetConfig(index);
+    if (cfg.isLocked()) {
+        resetBlurToDefault();
+        return;
+    }
+    m_blurPresetId = QString::fromUtf8(cfg.id);
+    m_blurPresetIndex = index;
+    m_blurRadius   = qMax(0, (int)cfg.sigma);
+    m_saturationFactor = cfg.satBoost;
+    m_overlayOpacity   = cfg.overlayOpacity;
+    m_overlayColor     = QColor::fromRgb(cfg.overlayColor);
+    m_blurBrightness   = cfg.brightness;
+    m_vignetteStrength = cfg.vignette;
+    m_grainStrength    = cfg.grain;
+
+    Q_EMIT blurPresetIdChanged();
+    Q_EMIT blurRadiusChanged();
+    Q_EMIT saturationFactorChanged();
+    Q_EMIT overlayOpacityChanged();
+    Q_EMIT overlayColorChanged();
+    Q_EMIT blurBrightnessChanged();
+    Q_EMIT vignetteStrengthChanged();
+    Q_EMIT grainStrengthChanged();
 }
+
+void WallpaperProcessor::resetBlurToDefault()
+{
+    m_blurPresetId = QStringLiteral("default");
+    m_blurPresetIndex = 0;
+    m_blurRadius   = 90;            // Default preset: 90 px blur
+    m_saturationFactor = 1.8;
+    m_overlayOpacity   = 0.0;
+    m_overlayColor     = Qt::black;
+    m_blurBrightness   = 1.0;
+    m_vignetteStrength = 0.0;
+    m_grainStrength    = 0.0;
+
+    Q_EMIT blurPresetIdChanged();
+    Q_EMIT blurRadiusChanged();
+    Q_EMIT saturationFactorChanged();
+    Q_EMIT overlayOpacityChanged();
+    Q_EMIT overlayColorChanged();
+    Q_EMIT blurBrightnessChanged();
+    Q_EMIT vignetteStrengthChanged();
+    Q_EMIT grainStrengthChanged();
+}
+
+void WallpaperProcessor::computeSmartAutoAndApply()
+{
+    // Ensure stats are fresh
+    if (!m_statsValid) {
+        // Analysis will be populated on next renderWallpaper call.
+        // For now use conservative defaults.
+        m_imageStats = ImageStats{};
+    }
+
+    m_blurPresetId = QStringLiteral("auto");
+    m_blurPresetIndex = static_cast<int>(BlurPresetId::Auto);
+
+    SmartAutoParams p = computeSmartAuto(m_imageStats);
+
+    m_blurRadius       = qMax(0, (int)p.sigma);
+    m_saturationFactor = p.satBoost;
+    m_blurBrightness   = p.brightness;
+    m_overlayOpacity   = p.overlayOpacity;
+    m_overlayColor     = QColor::fromRgb(p.overlayColor);
+    m_vignetteStrength = p.vignette;
+    m_grainStrength    = p.grain;
+
+    Q_EMIT blurPresetIdChanged();
+    Q_EMIT blurRadiusChanged();
+    Q_EMIT saturationFactorChanged();
+    Q_EMIT overlayOpacityChanged();
+    Q_EMIT overlayColorChanged();
+    Q_EMIT blurBrightnessChanged();
+    Q_EMIT vignetteStrengthChanged();
+    Q_EMIT grainStrengthChanged();
+}
+
+QStringList WallpaperProcessor::blurPresetNames() const
+{
+    QStringList names;
+    int n = blurPresetCount();
+    names.reserve(n);
+    for (int i = 0; i < n; ++i)
+        names.append(blurPresetName(i));
+    return names;
+}
+
+// ── Blur preset setters ──────────────────────────────────────────────
+
+void WallpaperProcessor::setOverlayOpacity(double o)
+{
+    o = qBound(0.0, o, 1.0);
+    if (qFuzzyCompare(o, m_overlayOpacity)) return;
+    m_overlayOpacity = o;
+    Q_EMIT overlayOpacityChanged();
+}
+
+void WallpaperProcessor::setOverlayColor(const QColor &c)
+{
+    if (m_overlayColor == c) return;
+    m_overlayColor = c;
+    Q_EMIT overlayColorChanged();
+}
+
+void WallpaperProcessor::setBlurBrightness(double b)
+{
+    b = qBound(0.0, b, 5.0);
+    if (qFuzzyCompare(b, m_blurBrightness)) return;
+    m_blurBrightness = b;
+    Q_EMIT blurBrightnessChanged();
+}
+

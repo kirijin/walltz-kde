@@ -7,6 +7,8 @@
         <file alias="blur.svg">icons/blur.svg</file>
         <file alias="saturation.svg">icons/saturation.svg</file>
         <file alias="zoom.svg">icons/zoom.svg</file>
+        <file alias="zoom-center.svg">icons/zoom-center.svg</file>
+        <file alias="pip.svg">icons/pip.svg</file>
         <file alias="rotation.svg">icons/rotation.svg</file>
         <file alias="angle.svg">icons/angle.svg</file>
         <file alias="swap.svg">icons/swap.svg</file>
