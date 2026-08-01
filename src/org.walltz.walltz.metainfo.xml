@@ -47,12 +47,12 @@
   <releases>
     <release version="0.2.0" date="2026-08-01">
       <description>
-        <p>Golden-rect zoom, pip zoom slider, 90px default blur</p>
+        <p>Zoom that respects the frame</p>
         <ul>
-          <li>Picture zoom ceiling = golden rect; default 80%</li>
-          <li>Photo frame resets to golden 5% on demand; starts off</li>
-          <li>Default preset blur 90 px (0 = auto still settable)</li>
-          <li>PiP zoom slider (1.0–4.0) in always-visible Zoom section</li>
+          <li>Picture zooms up to the golden margin — and stops there; default 80%</li>
+          <li>Reset Photo Frame button — one click back to the golden 5%; frame starts off</li>
+          <li>Default preset blurs at 90 px out of the box; auto still available</li>
+          <li>Picture-in-picture zoom as a simple slider (1.0–4.0) with fixed margins</li>
           <li>More background motifs, Lucide icon set</li>
         </ul>
       </description>
