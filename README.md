@@ -133,9 +133,7 @@ src/
 - Picture zoom ceiling = golden rect; default 80%
 - Photo frame resets to golden 5% on demand; starts off
 - Default preset blur 90 px (0 = auto still settable)
-- PiP zoom slider (1.0–4.0) in always-visible Zoom section
-- Blur slider max aligned with clamp (120)
-- AppImage no longer shipped; Flatpak is the portable path
+- PiP zoom slider (1.0–4.0)
 
 ### 0.1.0 (2026-07-19)
 
