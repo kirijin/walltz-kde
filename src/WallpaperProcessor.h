@@ -317,8 +317,9 @@ public:
     Q_INVOKABLE void restoreState();      // F6: restore to last rememberState()
 
     // ── Set-as-wallpaper (F1) ──
-    Q_INVOKABLE bool setAsWallpaper(const QString &path);
-    Q_INVOKABLE void processAndSetWallpaper(const QString &sourcePath);
+    enum WallpaperTarget { TargetDesktop = 0, TargetLockscreen = 1, TargetBoth = 2 };
+    Q_INVOKABLE bool setAsWallpaper(const QString &path, int target = TargetDesktop);
+    Q_INVOKABLE void processAndSetWallpaper(const QString &sourcePath, int target = TargetDesktop);
 
     /// Render one image synchronously to "<name>.wp.png" (used by CLI F3).
     bool processSingleImage(const QString &sourcePath, QString &outPath);
@@ -473,6 +474,13 @@ private:
 
     /// Decode a flat bgPatternType into a PatternRef (Q3). Single decode site.
     static PatternRef decodePatternType(int flat);
+
+    /// Map a WallpaperTarget to the portal's set-on value ("background" | "lockscreen" | "both").
+    static QString portalSetOn(int target);
+
+    /// Copy the rendered file to ~/Pictures and report the path (fallback when
+    /// no portal is available). Emits statusMessageChanged.
+    void saveToPictures(const QString &path);
 
     /// Static adaptive pattern overlay used by renderCore (thread-safe).
     static void renderAdaptivePatternStatic(QImage &output, const RenderSnapshot &rs,

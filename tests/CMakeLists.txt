@@ -20,6 +20,7 @@ if(BUILD_TESTING)
         Qt6::Gui
         Qt6::Svg
         Qt6::Concurrent
+        Qt6::DBus
         KF6::I18n
         KF6::CoreAddons
     )
@@ -49,6 +50,7 @@ if(BUILD_TESTING)
         Qt6::Gui
         Qt6::Svg
         Qt6::Concurrent
+        Qt6::DBus
         KF6::I18n
         KF6::CoreAddons
     )
@@ -75,6 +77,7 @@ if(BUILD_TESTING)
         Qt6::Gui
         Qt6::Svg
         Qt6::Concurrent
+        Qt6::DBus
         KF6::I18n
         KF6::CoreAddons
     )

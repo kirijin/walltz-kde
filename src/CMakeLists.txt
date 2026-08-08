@@ -29,6 +29,7 @@ target_link_libraries(walltz PRIVATE
     Qt6::Widgets
     Qt6::Concurrent
     Qt6::Svg
+    Qt6::DBus
     KF6::Kirigami
     KF6::I18n
     KF6::I18nQml

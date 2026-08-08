@@ -20,6 +20,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Widgets
     Concurrent
     Svg
+    DBus
 )
 
 find_package(KF6 REQUIRED COMPONENTS

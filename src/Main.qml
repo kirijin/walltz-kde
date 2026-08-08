@@ -40,10 +40,22 @@ Kirigami.ApplicationWindow {
             Kirigami.Action {
                 text: i18n("Set as wallpaper")
                 icon.name: "preferences-desktop-wallpaper"
+                displayHint: Kirigami.DisplayHint.KeepVisible
                 enabled: dropArea.fileCount === 1
                          && widthInput.length > 0 && heightInput.length > 0
                          && !processor.busy
-                onTriggered: processor.processAndSetWallpaper(dropArea.filePaths[0])
+                Kirigami.Action {
+                    text: i18n("Desktop")
+                    onTriggered: processor.processAndSetWallpaper(dropArea.filePaths[0], 0)
+                }
+                Kirigami.Action {
+                    text: i18n("Lockscreen")
+                    onTriggered: processor.processAndSetWallpaper(dropArea.filePaths[0], 1)
+                }
+                Kirigami.Action {
+                    text: i18n("Both")
+                    onTriggered: processor.processAndSetWallpaper(dropArea.filePaths[0], 2)
+                }
             },
             Kirigami.Action {
                 text: i18n("Undo tweaks")

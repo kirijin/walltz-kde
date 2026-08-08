@@ -23,7 +23,13 @@
 #include <QSvgRenderer>
 #include <QSettings>
 #include <QStandardPaths>
-#include <QProcess>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusObjectPath>
+#include <QDBusPendingCall>
+#include <QDBusPendingReply>
+#include <QDBusPendingCallWatcher>
+#include <QDBusUnixFileDescriptor>
 #include <QMutex>
 #include <vector>
 #include <functional>
@@ -2490,35 +2496,139 @@ void WallpaperProcessor::deleteParamPreset(const QString &name)
     Q_EMIT paramPresetsChanged();
 }
 
-// ── F1: set-as-wallpaper (Plasma 6 via plasma-apply-wallpaperimage) ──────
+// ── F1: set-as-wallpaper via XDG Desktop Portal (shell-agnostic) ─────────
+// Save is the contract: the render always exists. Set is best-effort: one
+// org.freedesktop.portal.Wallpaper.SetWallpaperFile call, no DE probing, and
+// honest status either way (portal confirmed "set" or saved-to-Pictures).
 
-bool WallpaperProcessor::setAsWallpaper(const QString &path)
+namespace {
+// QDBusConnection::connect on this Qt only accepts receiver+slot, so a
+// one-shot relay carries the Response callback; parented to the processor and
+// deleteLater'd after firing, so per-call state never touches processor state.
+class PortalResponseRelay : public QObject
 {
-    if (path.isEmpty() || !QFile::exists(path)) return false;
-    // plasma-apply-wallpaperimage is the supported Plasma 5.24+/6 CLI.
-    const QString tool = QStringLiteral("plasma-apply-wallpaperimage");
-    bool ok = QProcess::startDetached(tool, { path });
-    if (!ok) {
-        // Fallback: copy into the user wallpapers dir and let the user pick it.
-        const QString dir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation)
-                          + QStringLiteral("/.local/share/wallpapers");
-        QDir().mkpath(dir);
-        const QString dest = dir + QDir::separator() + QFileInfo(path).fileName();
-        ok = QFile::copy(path, dest);
+    Q_OBJECT
+public:
+    explicit PortalResponseRelay(std::function<void(uint, const QVariantMap &)> cb,
+                                 QObject *parent = nullptr)
+        : QObject(parent), m_cb(std::move(cb)) {}
+public Q_SLOTS:
+    void dispatch(uint response, const QVariantMap &results)
+    {
+        m_cb(response, results);
+        deleteLater();
     }
-    return ok;
+private:
+    std::function<void(uint, const QVariantMap &)> m_cb;
+};
 }
 
-void WallpaperProcessor::processAndSetWallpaper(const QString &sourcePath)
+QString WallpaperProcessor::portalSetOn(int target)
+{
+    switch (target) {
+    case TargetLockscreen: return QStringLiteral("lockscreen");
+    case TargetBoth:       return QStringLiteral("both");
+    default:               return QStringLiteral("background");
+    }
+}
+
+void WallpaperProcessor::saveToPictures(const QString &path)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    QDir().mkpath(dir);
+    const QString dest = dir + QDir::separator() + QFileInfo(path).fileName();
+    if (QFile::copy(path, dest))
+        m_statusMessage = i18n("Saved to %1 — set it in your desktop's settings", dest);
+    else
+        m_statusMessage = i18n("Rendered: %1", path);
+    Q_EMIT statusMessageChanged();
+}
+
+bool WallpaperProcessor::setAsWallpaper(const QString &path, int target)
+{
+    if (path.isEmpty() || !QFile::exists(path)) return false;
+
+    QFile *file = new QFile(path);
+    if (!file->open(QIODevice::ReadOnly)) {
+        delete file;
+        return false;
+    }
+
+    // handle_token becomes the last element of the Request object path, so it
+    // must be a valid D-Bus object-path element ([A-Za-z0-9_] only).
+    const QString token = QStringLiteral("walltz_%1_%2")
+                              .arg(QCoreApplication::applicationPid())
+                              .arg(QRandomGenerator::global()->generate());
+    QVariantMap options;
+    options.insert(QStringLiteral("handle_token"), token);
+    options.insert(QStringLiteral("set-on"), portalSetOn(target));
+    // The QML menu already IS the user's explicit choice; the portal's
+    // confirmation dialog (shown when show-preview is unset/default-true)
+    // would be a redundant second prompt. KDE backend honors this directly.
+    options.insert(QStringLiteral("show-preview"), false);
+
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.portal.Desktop"),
+        QStringLiteral("/org/freedesktop/portal/desktop"),
+        QStringLiteral("org.freedesktop.portal.Wallpaper"),
+        QStringLiteral("SetWallpaperFile"));
+    msg << QString()                                                        // parent_window (none)
+        << QVariant::fromValue(QDBusUnixFileDescriptor(file->handle()))     // fd
+        << options;                                                         // a{sv}
+
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
+    auto *watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, file, path]() {
+        watcher->deleteLater();
+        const QDBusPendingReply<QDBusObjectPath> reply = *watcher;
+        // The portal has copied the file by reply time; our fd is no longer needed.
+        file->deleteLater();
+        if (reply.isError()) {
+            // No portal on this desktop — the saved file IS the deliverable.
+            saveToPictures(path);
+            return;
+        }
+        // Portal replied with a Request object; its Response signal (u, a{sv})
+        // fires once: 0 = success, 1 = user cancelled, 2 = error.
+        const QDBusObjectPath requestPath = reply.value();
+        auto *relay = new PortalResponseRelay(
+            [this, path](uint response, const QVariantMap &results) {
+                if (response == 0) {
+                    m_statusMessage = i18n("Set as wallpaper: %1", QFileInfo(path).fileName());
+                } else if (response == 1) {
+                    m_statusMessage = i18n("Wallpaper change cancelled");
+                } else {
+                    const QString why = results.value(QStringLiteral("error")).toString();
+                    Q_EMIT errorOccurred(i18n("Could not set wallpaper: %1",
+                                              why.isEmpty() ? QStringLiteral("unknown error") : why));
+                    saveToPictures(path);
+                }
+                Q_EMIT statusMessageChanged();
+            },
+            this);
+        QDBusConnection::sessionBus().connect(
+            QStringLiteral("org.freedesktop.portal.Desktop"),
+            requestPath.path(),
+            QStringLiteral("org.freedesktop.portal.Request"),
+            QStringLiteral("Response"),
+            relay,
+            SLOT(dispatch(uint, QVariantMap)));
+    });
+    return true;
+}
+
+void WallpaperProcessor::processAndSetWallpaper(const QString &sourcePath, int target)
 {
     QString outPath;
     if (processSingleImage(sourcePath, outPath)) {
-        if (!setAsWallpaper(outPath))
-            Q_EMIT errorOccurred(i18n("Rendered but could not set wallpaper (plasma-apply-wallpaperimage unavailable)"));
-        else
-            m_statusMessage = i18n("Set as wallpaper: %1", QFileInfo(outPath).fileName());
+        if (!setAsWallpaper(outPath, target)) {
+            Q_EMIT errorOccurred(i18n("Rendered but could not open the output file"));
+            m_statusMessage = i18n("Rendered: %1", outPath);
+            Q_EMIT statusMessageChanged();
+        }
     } else {
         return;   // errorOccurred already emitted
     }
-    Q_EMIT statusMessageChanged();
 }
+
+#include "WallpaperProcessor.moc"
