@@ -170,6 +170,8 @@ int main(int argc, char *argv[])
     KIconTheme::initTheme();
     QApplication app(argc, argv);
 
+    KLocalizedString::setApplicationDomain("walltz");
+
     QCoreApplication::setOrganizationName(QStringLiteral("Walltz"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("walltz.app"));
     QCoreApplication::setApplicationName(QStringLiteral("walltz"));

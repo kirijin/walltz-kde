@@ -1711,7 +1711,7 @@ Kirigami.ApplicationWindow {
                 }
             }
 
-            Controls.ListView {
+            ListView {
                 id: presetList
                 Layout.fillWidth: true
                 Layout.preferredHeight: 160
