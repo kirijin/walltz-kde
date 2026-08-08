@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Blur-core regression gate for walltz (S1/S2/S3/P1/P2, 2026-08-08).
 // Q2 Demonstration: the range-clamped rewrite must match the old per-tap qBound
 // Gaussian byte-for-byte (tolerance: 1 LSB for float-kernel rounding), and the

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Optional render-core test target (H1).
 # Build: cmake -DBUILD_TESTING=ON .. && make walltz_render_test
 # Run:   ./build/tests/walltz_render_test   (or ctest)

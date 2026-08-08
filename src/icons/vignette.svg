@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!-- Two concentric rounded rects = darker edges -->
   <rect x="2.5" y="2.5" width="19" height="19" rx="3" fill="none" stroke="#ffffff" stroke-width="1.5"/>

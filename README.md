@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="icons/hicolor/scalable/apps/org.walltz.walltz.svg">
   <img alt="Walltz" src="icons/hicolor/scalable/apps/org.walltz.walltz.svg" width="96">

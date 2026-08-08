@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build a portable Walltz AppImage in a clean stock Fedora container
 # This produces an AppImage with stock Fedora Qt6 that works on Fedora 44+
 set -euo pipefail

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #ifndef WALLPAPERANALYZER_H
 #define WALLPAPERANALYZER_H
 

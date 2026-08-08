@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build Walltz as an AppImage
 # Usage: bash scripts/build-appimage.sh
 # Requires: docker or podman (runs build in walltz-dev container)

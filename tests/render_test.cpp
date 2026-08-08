@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Standalone render-core verification for walltz (not shipped; built in /tmp).
 // Exercises the unified renderCore in all three background modes + effects,
 // asserting output validity — the Demonstration for the refactor.

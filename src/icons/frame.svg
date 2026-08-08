@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!-- Corner brackets = photo frame (universal crop/frame icon) -->
   <path d="M3 7 L3 3 L7 3" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>

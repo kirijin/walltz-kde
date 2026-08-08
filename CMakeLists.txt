@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 cmake_minimum_required(VERSION 3.22)
 project(walltz)
 set(VERSION "0.2.0")

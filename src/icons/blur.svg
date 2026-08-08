@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!-- Solid → dashed → more dashed = decreasing clarity = blur -->
   <line x1="4" y1="7" x2="20" y2="7" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>

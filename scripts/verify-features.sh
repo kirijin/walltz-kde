@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Verify walltz features are correctly wired
 # Run from host (not inside distrobox)
 set -euo pipefail

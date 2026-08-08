@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 kirijin <avel.ronin@gmail.com> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!-- Three offset vertical bars = RGB channel separation (CA) -->
   <line x1="8" y1="3" x2="8" y2="21" stroke="#ffffff" stroke-width="2.5" opacity="0.3"/>
