@@ -10,8 +10,8 @@ struct BlurConfig {
     const char *id;          // "default", "apple", "gnome", "mica", "acrylic", "reddit"
     const char *displayName; // "Default", "Apple", "GNOME", "Mica", "Acrylic", "Reddit"
 
-    double sigma        = 47.5;
-    double satBoost     = 1.8;
+    double sigma        = 0.0;   // set from WalltzDefaults::blurRadius in the table
+    double satBoost     = 1.0;
     double brightness   = 1.0;
     double overlayOpacity = 0.0;   // 0-1, 0 = no tint overlay
     QRgb  overlayColor  = 0;       // sRGB, unused when overlayOpacity == 0

@@ -1,10 +1,12 @@
 #include "blur_presets.h"
+#include "WallpaperProcessor.h"   // for WalltzDefaults
 
 // ── Canonical preset table ──────────────────────────────────────────────
-// Order must match BlurPresetId enum exactly.
+// Order must match BlurPresetId enum exactly. The "default" row derives its
+// sigma/sat/brightness from WalltzDefaults so there is one source of truth (Q5).
 static const BlurConfig s_presets[] = {
     // id       display       σ     sat   bright  ovlOp  ovlColor   vig   grain
-    { "default", "Default", 90,    1.8, 1.00,   0.0,   0x000000,  0.0,  0.0 },
+    { "default", "Default", WalltzDefaults::blurRadius, WalltzDefaults::saturationFactor, WalltzDefaults::blurBrightness, WalltzDefaults::overlayOpacity, 0x000000, WalltzDefaults::vignetteStrength, WalltzDefaults::grainStrength },
     { "auto",    "Auto",      0.0,   1.0,  1.00,   0.0,   0x000000,  0.0,  0.0 },
     { "serenity","Serenity", 25,    0.30,  0.65,   0.55,  0x181824,  0.15,  0.0 },
     { "focus",   "Focus",     8,    0.55,  0.90,   0.15,  0x1c1c1c,  0.0,  0.0 },

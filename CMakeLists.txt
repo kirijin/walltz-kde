@@ -35,6 +35,7 @@ ecm_find_qmlmodule(QtQuick.Controls)
 ecm_find_qmlmodule(org.kde.kirigami)
 
 add_subdirectory(src)
+add_subdirectory(tests)
 
 # Install desktop file
 install(FILES org.walltz.walltz.desktop

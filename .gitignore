@@ -23,3 +23,5 @@ meta_types/
 .flatpak-builder/
 flatpak-build/
 .hermes/
+build-dir/
+AGENTS.md

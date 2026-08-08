@@ -10,75 +10,167 @@
 #include <QVariantList>
 #include <QPair>
 #include <QAtomicInt>
+#include <QPointer>
+#include <QMutex>
 #include <QtConcurrent>
 #include <QPainterPath>
+#include <QFutureWatcher>
 
 #include "blur_presets.h"
 #include "WallpaperAnalyzer.h"
 
 class QWindow;
 
+// ── Factory defaults (single source of truth) ─────────────────────────────
+// These are the one canonical copy. blur_presets.cpp's "default" row and
+// Main.qml reset buttons derive from these via the accessors below.
+namespace WalltzDefaults {
+    inline constexpr int    blurRadius       = 90;    // px; 0 = auto
+    inline constexpr double saturationFactor = 1.8;
+    inline constexpr double blurBrightness   = 1.0;
+    inline constexpr double overlayOpacity   = 0.0;
+    inline constexpr double bgZoom           = 1.0;
+    inline constexpr double bgBlurAngle      = 0.0;
+    inline constexpr double gradientAngle    = 45.0;
+    inline constexpr double fgZoom           = 0.8;   // 1.0 = golden-rect ceiling
+    inline constexpr double pipZoom          = 1.0;
+    inline constexpr double vignetteStrength = 0.0;
+    inline constexpr double grainStrength    = 0.0;
+    inline constexpr double caStrength       = 0.0;
+    inline constexpr int    photoFrameWidth  = 0;     // % of min dim; 5 = golden ρ
+    inline constexpr int    blurRadiusMax    = 120;
+    // Composition
+    inline constexpr double canvasMarginRho  = 0.05;  // 5% margin each side
+    inline constexpr double minZoom          = 0.5;   // picture shrinks to half golden
+}
+
+/// Category of a background pattern, decoded from the flat integer id.
+enum class PatternKind { Geometric, SvgGeo, Motif };
+
+/// A decoded pattern reference. The flat `bgPatternType` int encodes the
+/// category in ranges (0-49 geo, 50-99 svg, 100+ motif); PatternRef makes the
+/// category explicit so no consumer re-derives it with qBound chains.
+struct PatternRef {
+    PatternKind kind = PatternKind::Geometric;
+    int index = 0;             // 0-based within its kind
+    int flat = 0;              // original flat bgPatternType value
+};
+
+// ── Render-parameter snapshot ─────────────────────────────────────────────
+// Captured by value so a background thread can render without touching the
+// processor. All mood/gradient colors are PRE-RESOLVED into the snapshot so
+// the render core never reads processor members.
+struct RenderSnapshot {
+    // Target canvas
+    int W = 1920, H = 1080;
+    // Background mode
+    bool blurMode = true;
+    int  bgGradientStyle = 0;          // 0=Solid, 1=Preset, 2=Auto(mood)
+    // Blur
+    double bgZoom = WalltzDefaults::bgZoom;
+    double bgBlurAngle = WalltzDefaults::bgBlurAngle;
+    int    blurRadius = WalltzDefaults::blurRadius;
+    double saturationFactor = WalltzDefaults::saturationFactor;
+    double overlayOpacity = WalltzDefaults::overlayOpacity;
+    QRgb   overlayColor = 0xff000000;
+    double blurBrightness = WalltzDefaults::blurBrightness;
+    // Solid / gradient background
+    bool   autoColor = true;
+    QRgb   bgColor = 0xffffffff;
+    int    bgGradientPreset = 0;
+    double gradientAngle = WalltzDefaults::gradientAngle;
+    // Pre-resolved gradient endpoints (auto/mood mode); resolved on main thread
+    QRgb   moodColorA = 0xff808080;
+    QRgb   moodColorB = 0xffb4b4b4;
+    // Patterns
+    bool   bgPatternEnabled = false;
+    int    bgPatternType = 0;
+    QRgb   bgPatternColor = 0xff787878;
+    double bgPatternScale = 1.0;
+    double bgPatternRotation = 0.0;
+    double bgPatternSpacing = 0.0;
+    bool   bgPatternRandomRotate = false;
+    bool   bgPatternJitter = false;
+    double bgPatternGridAmplitude = 0.20;
+    bool   bgPatternMixEnabled = false;
+    QList<int> bgPatternMixMotifs;
+    // Effects
+    double vignetteStrength = WalltzDefaults::vignetteStrength;
+    double grainStrength = WalltzDefaults::grainStrength;
+    double caStrength = WalltzDefaults::caStrength;
+    bool   photoFrame = false;
+    int    photoFrameWidth = WalltzDefaults::photoFrameWidth;
+    double fgZoom = WalltzDefaults::fgZoom;
+    double pipZoom = WalltzDefaults::pipZoom;
+    // Mood selection (used by the worker queue to resolve per-image colors)
+    int    autoMood = 0;
+    bool   useV2 = false;
+    // Source image (implicitly shared — cheap, no detach)
+    QImage sourceImage;
+};
+
 class WallpaperProcessor : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(int targetWidth READ targetWidth WRITE setTargetWidth NOTIFY targetWidthChanged)
-    Q_PROPERTY(int targetHeight READ targetHeight WRITE setTargetHeight NOTIFY targetHeightChanged)
+    Q_PROPERTY(int targetWidth READ targetWidth WRITE setTargetWidth NOTIFY renderParamsChanged)
+    Q_PROPERTY(int targetHeight READ targetHeight WRITE setTargetHeight NOTIFY renderParamsChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     Q_PROPERTY(QString outputPath READ outputPath NOTIFY outputPathChanged)
-    Q_PROPERTY(bool blurMode READ blurMode WRITE setBlurMode NOTIFY blurModeChanged)
+    Q_PROPERTY(bool blurMode READ blurMode WRITE setBlurMode NOTIFY renderParamsChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
-    Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY backgroundColorChanged)
-    Q_PROPERTY(bool autoColor READ autoColor WRITE setAutoColor NOTIFY autoColorChanged)
+    Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY renderParamsChanged)
+    Q_PROPERTY(bool autoColor READ autoColor WRITE setAutoColor NOTIFY renderParamsChanged)
     Q_PROPERTY(int queueSize READ queueSize NOTIFY queueChanged)
     Q_PROPERTY(int queueProgress READ queueProgress NOTIFY queueProgressChanged)
     Q_PROPERTY(int screenWidth READ screenWidth NOTIFY screenWidthChanged)
     Q_PROPERTY(int screenHeight READ screenHeight NOTIFY screenHeightChanged)
     Q_PROPERTY(double windowDpr READ windowDpr NOTIFY windowDprChanged)
     Q_PROPERTY(bool keepAbove READ keepAbove NOTIFY keepAboveChanged)
-    Q_PROPERTY(int aspectMode READ aspectMode WRITE setAspectMode NOTIFY aspectModeChanged)
-    // ── New tweakable parameters ──
-    Q_PROPERTY(int blurRadius READ blurRadius WRITE setBlurRadius NOTIFY blurRadiusChanged)
-    Q_PROPERTY(double saturationFactor READ saturationFactor WRITE setSaturationFactor NOTIFY saturationFactorChanged)
-    // ── Blur preset overlays ──
-    Q_PROPERTY(double overlayOpacity READ overlayOpacity WRITE setOverlayOpacity NOTIFY overlayOpacityChanged)
-    Q_PROPERTY(QColor overlayColor READ overlayColor WRITE setOverlayColor NOTIFY overlayColorChanged)
-    Q_PROPERTY(double blurBrightness READ blurBrightness WRITE setBlurBrightness NOTIFY blurBrightnessChanged)
+    Q_PROPERTY(int aspectMode READ aspectMode WRITE setAspectMode NOTIFY renderParamsChanged)
+    Q_PROPERTY(int blurRadius READ blurRadius WRITE setBlurRadius NOTIFY renderParamsChanged)
+    Q_PROPERTY(double saturationFactor READ saturationFactor WRITE setSaturationFactor NOTIFY renderParamsChanged)
+    Q_PROPERTY(double overlayOpacity READ overlayOpacity WRITE setOverlayOpacity NOTIFY renderParamsChanged)
+    Q_PROPERTY(QColor overlayColor READ overlayColor WRITE setOverlayColor NOTIFY renderParamsChanged)
+    Q_PROPERTY(double blurBrightness READ blurBrightness WRITE setBlurBrightness NOTIFY renderParamsChanged)
     Q_PROPERTY(QString blurPresetId READ blurPresetId NOTIFY blurPresetIdChanged)
     Q_PROPERTY(QStringList blurPresetNames READ blurPresetNames CONSTANT)
     Q_PROPERTY(int blurPresetIndex READ blurPresetIndex WRITE setBlurPresetIndex NOTIFY blurPresetIdChanged)
-    Q_INVOKABLE void resetBlurToDefault();
-    Q_PROPERTY(int bgGradientStyle READ bgGradientStyle WRITE setBgGradientStyle NOTIFY bgGradientStyleChanged)
-    Q_PROPERTY(int bgGradientPreset READ bgGradientPreset WRITE setBgGradientPreset NOTIFY bgGradientPresetChanged)
-    Q_PROPERTY(double gradientAngle READ gradientAngle WRITE setGradientAngle NOTIFY gradientAngleChanged)
-    Q_PROPERTY(double bgZoom READ bgZoom WRITE setBgZoom NOTIFY bgZoomChanged)
-    Q_PROPERTY(double bgBlurAngle READ bgBlurAngle WRITE setBgBlurAngle NOTIFY bgBlurAngleChanged)
-    Q_PROPERTY(int autoMood READ autoMood WRITE setAutoMood NOTIFY autoMoodChanged)
-    Q_PROPERTY(bool useV2 READ useV2 WRITE setUseV2 NOTIFY useV2Changed)
-    Q_PROPERTY(double vignetteStrength READ vignetteStrength WRITE setVignetteStrength NOTIFY vignetteStrengthChanged)
-    Q_PROPERTY(double grainStrength READ grainStrength WRITE setGrainStrength NOTIFY grainStrengthChanged)
-    Q_PROPERTY(double caStrength READ caStrength WRITE setCaStrength NOTIFY caStrengthChanged)
-    Q_PROPERTY(bool photoFrame READ photoFrame WRITE setPhotoFrame NOTIFY photoFrameChanged)
-    Q_PROPERTY(int photoFrameWidth READ photoFrameWidth WRITE setPhotoFrameWidth NOTIFY photoFrameWidthChanged)
-    Q_PROPERTY(double fgZoom READ fgZoom WRITE setFgZoom NOTIFY fgZoomChanged)
-    Q_PROPERTY(double pipZoom READ pipZoom WRITE setPipZoom NOTIFY pipZoomChanged)
+    Q_PROPERTY(int bgGradientStyle READ bgGradientStyle WRITE setBgGradientStyle NOTIFY renderParamsChanged)
+    Q_PROPERTY(int bgGradientPreset READ bgGradientPreset WRITE setBgGradientPreset NOTIFY renderParamsChanged)
+    Q_PROPERTY(double gradientAngle READ gradientAngle WRITE setGradientAngle NOTIFY renderParamsChanged)
+    Q_PROPERTY(double bgZoom READ bgZoom WRITE setBgZoom NOTIFY renderParamsChanged)
+    Q_PROPERTY(double bgBlurAngle READ bgBlurAngle WRITE setBgBlurAngle NOTIFY renderParamsChanged)
+    Q_PROPERTY(int autoMood READ autoMood WRITE setAutoMood NOTIFY renderParamsChanged)
+    Q_PROPERTY(bool useV2 READ useV2 WRITE setUseV2 NOTIFY renderParamsChanged)
+    Q_PROPERTY(double vignetteStrength READ vignetteStrength WRITE setVignetteStrength NOTIFY renderParamsChanged)
+    Q_PROPERTY(double grainStrength READ grainStrength WRITE setGrainStrength NOTIFY renderParamsChanged)
+    Q_PROPERTY(double caStrength READ caStrength WRITE setCaStrength NOTIFY renderParamsChanged)
+    Q_PROPERTY(bool photoFrame READ photoFrame WRITE setPhotoFrame NOTIFY renderParamsChanged)
+    Q_PROPERTY(int photoFrameWidth READ photoFrameWidth WRITE setPhotoFrameWidth NOTIFY renderParamsChanged)
+    Q_PROPERTY(double fgZoom READ fgZoom WRITE setFgZoom NOTIFY renderParamsChanged)
+    Q_PROPERTY(double pipZoom READ pipZoom WRITE setPipZoom NOTIFY renderParamsChanged)
     Q_PROPERTY(double fgZoomMin READ fgZoomMin NOTIFY fgZoomBoundsChanged)
     Q_PROPERTY(double fgZoomMax READ fgZoomMax NOTIFY fgZoomBoundsChanged)
-    // ── Pattern properties ──
-    Q_PROPERTY(bool bgPatternEnabled READ bgPatternEnabled WRITE setBgPatternEnabled NOTIFY bgPatternEnabledChanged)
-    Q_PROPERTY(int bgPatternType READ bgPatternType WRITE setBgPatternType NOTIFY bgPatternTypeChanged)
-    Q_PROPERTY(QColor bgPatternColor READ bgPatternColor WRITE setBgPatternColor NOTIFY bgPatternColorChanged)
-    Q_PROPERTY(double bgPatternScale READ bgPatternScale WRITE setBgPatternScale NOTIFY bgPatternScaleChanged)
-    Q_PROPERTY(double bgPatternRotation READ bgPatternRotation WRITE setBgPatternRotation NOTIFY bgPatternRotationChanged)
-    Q_PROPERTY(double bgPatternSpacing READ bgPatternSpacing WRITE setBgPatternSpacing NOTIFY bgPatternSpacingChanged)
-    Q_PROPERTY(bool bgPatternRandomRotate READ bgPatternRandomRotate WRITE setBgPatternRandomRotate NOTIFY bgPatternRandomRotateChanged)
-    Q_PROPERTY(bool bgPatternJitter READ bgPatternJitter WRITE setBgPatternJitter NOTIFY bgPatternJitterChanged)
-    Q_PROPERTY(double bgPatternGridAmplitude READ bgPatternGridAmplitude WRITE setBgPatternGridAmplitude NOTIFY bgPatternGridAmplitudeChanged)
-    Q_PROPERTY(bool bgPatternMixEnabled READ bgPatternMixEnabled WRITE setBgPatternMixEnabled NOTIFY bgPatternMixEnabledChanged)
+    Q_PROPERTY(bool bgPatternEnabled READ bgPatternEnabled WRITE setBgPatternEnabled NOTIFY renderParamsChanged)
+    Q_PROPERTY(int bgPatternType READ bgPatternType WRITE setBgPatternType NOTIFY renderParamsChanged)
+    Q_PROPERTY(QColor bgPatternColor READ bgPatternColor WRITE setBgPatternColor NOTIFY renderParamsChanged)
+    Q_PROPERTY(double bgPatternScale READ bgPatternScale WRITE setBgPatternScale NOTIFY renderParamsChanged)
+    Q_PROPERTY(double bgPatternRotation READ bgPatternRotation WRITE setBgPatternRotation NOTIFY renderParamsChanged)
+    Q_PROPERTY(double bgPatternSpacing READ bgPatternSpacing WRITE setBgPatternSpacing NOTIFY renderParamsChanged)
+    Q_PROPERTY(bool bgPatternRandomRotate READ bgPatternRandomRotate WRITE setBgPatternRandomRotate NOTIFY renderParamsChanged)
+    Q_PROPERTY(bool bgPatternJitter READ bgPatternJitter WRITE setBgPatternJitter NOTIFY renderParamsChanged)
+    Q_PROPERTY(double bgPatternGridAmplitude READ bgPatternGridAmplitude WRITE setBgPatternGridAmplitude NOTIFY renderParamsChanged)
+    Q_PROPERTY(bool bgPatternMixEnabled READ bgPatternMixEnabled WRITE setBgPatternMixEnabled NOTIFY renderParamsChanged)
+    Q_PROPERTY(QVariantList bgPatternMixMotifs READ bgPatternMixMotifs NOTIFY bgPatternMixMotifsChanged)
+    Q_PROPERTY(int mixMotifCount READ mixMotifCount NOTIFY bgPatternMixMotifsChanged)
+
+    // ── Named-parameter presets (F2) ──
+    Q_PROPERTY(QStringList paramPresetNames READ paramPresetNames NOTIFY paramPresetsChanged)
 
 public:
     explicit WallpaperProcessor(QObject *parent = nullptr);
 
-    // ── Existing getters ──
+    // ── Getters ──
     int targetWidth() const { return m_targetWidth; }
     int targetHeight() const { return m_targetHeight; }
     QString statusMessage() const { return m_statusMessage; }
@@ -88,16 +180,14 @@ public:
     QColor backgroundColor() const { return m_bgColor; }
     bool autoColor() const { return m_autoColor; }
     int queueSize() const { return m_queue.size(); }
-    int queueProgress() const { return m_queueProgress; }
+    int queueProgress() const { return m_queueProgress.loadRelaxed(); }
     int screenWidth() const { return m_screenWidth; }
     int screenHeight() const { return m_screenHeight; }
     bool keepAbove() const { return m_keepAbove; }
     double windowDpr() const { return m_windowDpr; }
     int aspectMode() const { return m_aspectMode; }
-    // ── New getters ──
     int blurRadius() const { return m_blurRadius; }
     double saturationFactor() const { return m_saturationFactor; }
-    // ── Blur preset getters ──
     double overlayOpacity() const { return m_overlayOpacity; }
     QColor overlayColor() const { return m_overlayColor; }
     double blurBrightness() const { return m_blurBrightness; }
@@ -123,7 +213,6 @@ public:
     void setPipZoom(double z);
     double fgZoomMin() const { return m_fgZoomMin; }
     double fgZoomMax() const { return m_fgZoomMax; }
-    // ── Pattern getters ──
     bool bgPatternEnabled() const { return m_bgPatternEnabled; }
     int bgPatternType() const { return m_bgPatternType; }
     QColor bgPatternColor() const { return m_bgPatternColor; }
@@ -132,19 +221,19 @@ public:
     double bgPatternSpacing() const { return m_bgPatternSpacing; }
     bool bgPatternRandomRotate() const { return m_bgPatternRandomRotate; }
     bool bgPatternJitter() const { return m_bgPatternJitter; }
-    bool bgPatternMixEnabled() const { return m_bgPatternMixEnabled; }
     double bgPatternGridAmplitude() const { return m_bgPatternGridAmplitude; }
+    bool bgPatternMixEnabled() const { return m_bgPatternMixEnabled; }
+    QVariantList bgPatternMixMotifs() const;
+    int mixMotifCount() const { return m_bgPatternMixMotifs.size(); }
 
-    // ── Existing setters ──
+    // ── Setters ──
     void setTargetWidth(int w);
     void setTargetHeight(int h);
     void setBlurMode(bool blur);
     void setBackgroundColor(const QColor &c);
     void setAutoColor(bool autoC);
-    // ── New setters ──
     void setBlurRadius(int r);
     void setSaturationFactor(double f);
-    // ── Blur preset setters ──
     void setOverlayOpacity(double o);
     void setOverlayColor(const QColor &c);
     void setBlurBrightness(double b);
@@ -160,7 +249,6 @@ public:
     void setCaStrength(double s);
     void setPhotoFrame(bool on);
     void setPhotoFrameWidth(int w);
-    // ── Pattern setters ──
     void setBgPatternEnabled(bool on);
     void setBgPatternType(int t);
     void setBgPatternColor(const QColor &c);
@@ -171,8 +259,11 @@ public:
     void setBgPatternJitter(bool on);
     void setBgPatternGridAmplitude(double v);
     void setBgPatternMixEnabled(bool on);
+    Q_INVOKABLE void setBgPatternMixMotifs(const QVariantList &indices);
+    Q_INVOKABLE void toggleMixMotif(int index);
+    Q_INVOKABLE void resetBlurToDefault();
 
-    /// Generate a small processed preview (400px max) — returns file:// URL
+    /// Generate a small processed preview — returns last-good file:// URL.
     Q_INVOKABLE QString generatePreview(const QString &sourcePath);
 
     /// Gradient preset access
@@ -182,55 +273,55 @@ public:
     Q_INVOKABLE QString gradientPresetColor2(int index) const;
     Q_INVOKABLE double aspectRatioForMode(int mode) const;
 
-    /// Mood palette access (auto-gradient variants)
+    /// Mood palette access
     Q_INVOKABLE int moodCount() const { return 6; }
     Q_INVOKABLE QString moodName(int index) const;
     Q_INVOKABLE QString moodColorA(int index) const;
     Q_INVOKABLE QString moodColorB(int index) const;
-
-    /// V2 mood palette access (3D RGB histogram — second row)
     Q_INVOKABLE QString moodNameV2(int index) const;
     Q_INVOKABLE QString moodColorV2A(int index) const;
     Q_INVOKABLE QString moodColorV2B(int index) const;
 
     // ── Pattern QML accessors ──
-    /// Total number of geometric pattern types
     Q_INVOKABLE int geometricPatternCount() const;
-    /// Name of a geometric pattern type (for UI labels)
     Q_INVOKABLE QString geometricPatternName(int index) const;
-    /// Generate a small thumbnail for a geometric pattern (returns file:// URL)
-    Q_INVOKABLE QString geometricPatternThumbnail(int index, int thumbSize = 60) const;
-
-    /// Total number of motif (icon) pattern types
+    Q_INVOKABLE QString geometricPatternThumbnail(int index, int thumbSize = 60);
     Q_INVOKABLE int motifPatternCount() const;
-    /// Name of a motif pattern
     Q_INVOKABLE QString motifPatternName(int index) const;
-    /// Category of a motif: 0=animal, 1=critter, 2=nature, 3=music, 4=celestial, 5=whimsical
     Q_INVOKABLE int motifPatternCategory(int index) const;
-    /// Category name for UI tabs
     Q_INVOKABLE QString motifCategoryName(int cat) const;
-    /// Offset for motif pattern types (add to motif index to get bgPatternType value)
     Q_INVOKABLE int motifOffset() const { return MOTIF_OFFSET; }
-    /// Generate a small thumbnail for a motif pattern (returns file:// URL)
-    Q_INVOKABLE QString motifPatternThumbnail(int index, int thumbSize = 60) const;
-
-    // ── SVG geometric primitive accessors ──
+    Q_INVOKABLE QString motifPatternThumbnail(int index, int thumbSize = 60);
     Q_INVOKABLE int svgGeoPatternCount() const { return SVG_GEO_COUNT; }
     Q_INVOKABLE int svgGeoOffset() const { return SVG_GEO_OFFSET; }
     Q_INVOKABLE QString svgGeoPatternName(int index) const;
-    Q_INVOKABLE QString svgGeoPatternThumbnail(int index, int thumbSize = 60) const;
+    Q_INVOKABLE QString svgGeoPatternThumbnail(int index, int thumbSize = 60);
 
-    /// Get the currently selected mix motif indices (for QML to highlight)
-    Q_PROPERTY(QVariantList bgPatternMixMotifs READ bgPatternMixMotifs
-               NOTIFY bgPatternMixMotifsChanged)
-    Q_INVOKABLE QVariantList bgPatternMixMotifs() const;
-    /// Number of patterns currently in the mix (reliable for QML labels)
-    Q_PROPERTY(int mixMotifCount READ mixMotifCount NOTIFY bgPatternMixMotifsChanged)
-    Q_INVOKABLE int mixMotifCount() const { return m_bgPatternMixMotifs.size(); }
-    /// Set mix motif indices
-    Q_INVOKABLE void setBgPatternMixMotifs(const QVariantList &indices);
-    /// Toggle a motif in the mix selection
-    Q_INVOKABLE void toggleMixMotif(int index);
+    // ── Factory-default accessors for QML reset buttons (Q5) ──
+    Q_INVOKABLE int defaultBlurRadius() const       { return WalltzDefaults::blurRadius; }
+    Q_INVOKABLE double defaultSaturation() const    { return WalltzDefaults::saturationFactor; }
+    Q_INVOKABLE double defaultBrightness() const    { return WalltzDefaults::blurBrightness; }
+    Q_INVOKABLE double defaultBgZoom() const        { return WalltzDefaults::bgZoom; }
+    Q_INVOKABLE double defaultBgBlurAngle() const   { return WalltzDefaults::bgBlurAngle; }
+    Q_INVOKABLE double defaultGradientAngle() const { return WalltzDefaults::gradientAngle; }
+    Q_INVOKABLE double defaultFgZoom() const        { return WalltzDefaults::fgZoom; }
+    Q_INVOKABLE double defaultPipZoom() const       { return WalltzDefaults::pipZoom; }
+    Q_INVOKABLE int defaultPhotoFrameWidth() const  { return WalltzDefaults::photoFrameWidth; }
+
+    // ── Named-parameter presets (F2) ──
+    QStringList paramPresetNames() const;
+    Q_INVOKABLE void saveParamPreset(const QString &name);
+    Q_INVOKABLE void applyParamPreset(const QString &name);
+    Q_INVOKABLE void deleteParamPreset(const QString &name);
+    Q_INVOKABLE void rememberState();     // F6: snapshot all params (undo anchor)
+    Q_INVOKABLE void restoreState();      // F6: restore to last rememberState()
+
+    // ── Set-as-wallpaper (F1) ──
+    Q_INVOKABLE bool setAsWallpaper(const QString &path);
+    Q_INVOKABLE void processAndSetWallpaper(const QString &sourcePath);
+
+    /// Render one image synchronously to "<name>.wp.png" (used by CLI F3).
+    bool processSingleImage(const QString &sourcePath, QString &outPath);
 
 public Q_SLOTS:
     void detectScreenSize();
@@ -243,64 +334,31 @@ public Q_SLOTS:
     void updateScreenSize(int w, int h);
 
 private Q_SLOTS:
-    void processNext();
+    void startQueue();
+    void handleQueueResult(int index, const QString &outPath);
+    void finishQueue();
     void detectFromWindow();
     void pollDpr();
 
 Q_SIGNALS:
-    void targetWidthChanged();
-    void targetHeightChanged();
+    /// Aggregate: emitted by every render-affecting setter (Q2). QML hooks one handler.
+    void renderParamsChanged();
     void statusMessageChanged();
     void outputPathChanged();
-    void blurModeChanged();
-    void backgroundColorChanged();
-    void autoColorChanged();
+    void busyChanged();
     void queueChanged();
     void queueProgressChanged();
-    void busyChanged();
     void screenWidthChanged();
     void screenHeightChanged();
     void keepAboveChanged();
-    void aspectModeChanged();
     void windowDprChanged();
+    void blurPresetIdChanged();
+    void fgZoomBoundsChanged();
+    void bgPatternMixMotifsChanged();
+    void paramPresetsChanged();
     void processingStarted();
     void processingFinished();
     void errorOccurred(const QString &message);
-    // ── New signals ──
-    void blurRadiusChanged();
-    void saturationFactorChanged();
-    // ── Blur preset signals ──
-    void overlayOpacityChanged();
-    void overlayColorChanged();
-    void blurBrightnessChanged();
-    void blurPresetIdChanged();
-    void bgGradientStyleChanged();
-    void bgGradientPresetChanged();
-    void gradientAngleChanged();
-    void bgZoomChanged();
-    void bgBlurAngleChanged();
-    void autoMoodChanged();
-    void useV2Changed();
-    void vignetteStrengthChanged();
-    void grainStrengthChanged();
-    void caStrengthChanged();
-    void photoFrameChanged();
-    void photoFrameWidthChanged();
-    void fgZoomChanged();
-    void pipZoomChanged();
-    void fgZoomBoundsChanged();
-    // ── Pattern signals ──
-    void bgPatternEnabledChanged();
-    void bgPatternTypeChanged();
-    void bgPatternColorChanged();
-    void bgPatternScaleChanged();
-    void bgPatternRotationChanged();
-    void bgPatternSpacingChanged();
-    void bgPatternRandomRotateChanged();
-    void bgPatternJitterChanged();
-    void bgPatternGridAmplitudeChanged();
-    void bgPatternMixEnabledChanged();
-    void bgPatternMixMotifsChanged();
     void previewReady(const QString &sourcePath, const QString &previewUrl);
 
 private:
@@ -314,63 +372,65 @@ private:
     bool m_busy = false;
     QColor m_bgColor = Qt::white;
     bool m_autoColor = true;
-    bool m_cancelRequested = false;
-    QWindow *m_window = nullptr;
+    QPointer<QWindow> m_window;              // B7: null-safe on window destruction
     double m_windowDpr = 1.0;
     bool m_keepAbove = false;
     int m_aspectMode = 0;
     double m_aspectRatio = 0.0;
     int m_detectAttempt = 0;
+    int m_dprStableCount = 0;   // bounded DPR poll self-terminates (Q11)
 
+    // ── Async queue (worker pool, B8) ──
     QStringList m_queue;
-    int m_queueProgress = 0;
-    int m_currentIndex = 0;
+    QAtomicInt m_queueProgress{0};
+    QAtomicInt m_cancelRequested{0};
+    QFutureWatcher<QPair<int, QString>> m_queueWatcher;
+    RenderSnapshot m_queueSnapshot;      // params captured on main thread
+    QVariantMap m_undoSnapshot;          // F6: undo anchor (rememberState/restoreState)
 
-    // ── New tweakable parameters ──
-    int m_blurRadius = 90;          // Default preset: 90 px blur; 0 = auto (hand-settable)
-    double m_saturationFactor = 1.8;
-    // ── Blur preset overlay state ──
+    int m_blurRadius = WalltzDefaults::blurRadius;
+    double m_saturationFactor = WalltzDefaults::saturationFactor;
     QString m_blurPresetId = QStringLiteral("default");
     int m_blurPresetIndex = 0;
-    double m_overlayOpacity = 0.0;
+    double m_overlayOpacity = WalltzDefaults::overlayOpacity;
     QColor m_overlayColor = Qt::black;
-    double m_blurBrightness = 1.0;
-    int m_bgGradientStyle = 0;      // 0 = Solid, 1 = Preset, 2 = Auto
-    int m_bgGradientPreset = 0;     // index into s_presets[]
-    double m_gradientAngle = 45.0;   // degrees (0 = horizontal, 45 = diagonal ↘)
-    double m_bgZoom = 1.0;          // background zoom multiplier (0.5–3.0, 1.0 = fill)
-    double m_bgBlurAngle = 0.0;     // blur background rotation (degrees, 0 = normal)
-    int m_autoMood = 0;             // 0=Auto, 1=Soft, 2=Vivid, 3=Warm, 4=Cool, 5=Deep
-    bool m_useV2 = false;           // use V2 (3D RGB histogram) instead of V1
-    double m_vignetteStrength = 0.0; // vignette: 0 = off, 1 = max
-    double m_grainStrength = 0.0;    // grain: 0 = off, 1 = max
-    double m_caStrength = 0.0;       // chromatic aberration: 0 = off, 1 = max
-    bool m_photoFrame = false;      // frame off at start; golden ρ (5) is the reset-button value
-    int m_photoFrameWidth = 0;      // frame ratio in % of min image dim; 5 = golden ρ, 0 = off
-    double m_fgZoom = 0.8;          // foreground rect zoom: 1 = golden rect (max ceiling); 0.8 = default 80%; <1 = shrink
-    double m_pipZoom = 1.0;         // PiP content magnify: zooms inside the rect, margins stay put
-    double m_fgZoomMin = 0.5;       // last computed zoom bounds (render-time)
+    double m_blurBrightness = WalltzDefaults::blurBrightness;
+    int m_bgGradientStyle = 0;
+    int m_bgGradientPreset = 0;
+    double m_gradientAngle = WalltzDefaults::gradientAngle;
+    double m_bgZoom = WalltzDefaults::bgZoom;
+    double m_bgBlurAngle = WalltzDefaults::bgBlurAngle;
+    int m_autoMood = 0;
+    bool m_useV2 = false;
+    double m_vignetteStrength = WalltzDefaults::vignetteStrength;
+    double m_grainStrength = WalltzDefaults::grainStrength;
+    double m_caStrength = WalltzDefaults::caStrength;
+    bool m_photoFrame = false;
+    int m_photoFrameWidth = WalltzDefaults::photoFrameWidth;
+    double m_fgZoom = WalltzDefaults::fgZoom;
+    double m_pipZoom = WalltzDefaults::pipZoom;
+    double m_fgZoomMin = WalltzDefaults::minZoom;
     double m_fgZoomMax = 1.0;
-    QColor m_moodColorsA[6];        // cached mood gradient color A (index = mood)
-    QColor m_moodColorsB[6];        // cached mood gradient color B
-    QColor m_moodColorsV2A[6];      // V2 mood gradient color A (second row)
-    QColor m_moodColorsV2B[6];      // V2 mood gradient color B
-    bool m_moodsComputed = false;   // true after computeAllMoods()
+    QColor m_moodColorsA[6];
+    QColor m_moodColorsB[6];
+    QColor m_moodColorsV2A[6];
+    QColor m_moodColorsV2B[6];
+    bool m_moodsComputed = false;
+    // Recursive: computeMoodPalettes() calls computeMoodPalettesV2() internally.
+    mutable QRecursiveMutex m_moodMutex;   // guards the four palette arrays + flag
 
     // ── Pattern parameters ──
     bool m_bgPatternEnabled = false;
-    int m_bgPatternType = 0;         // 0..7 = geometric, 50..65 = SVG geo, 100..137 = motif, 150..157 = texture
-    QColor m_bgPatternColor = QColor(120, 120, 120); // pattern foreground
-    double m_bgPatternScale = 1.0;   // 0.3 – 3.0
-    double m_bgPatternRotation = 0.0; // degrees (per-tile random now)
-    double m_bgPatternSpacing = 0.0;  // extra gap between tiles, 0.0-2.0
-    bool m_bgPatternRandomRotate = false;  // random per-tile rotation off by default
-    bool m_bgPatternJitter = false;       // random grid offset jitter
-    double m_bgPatternGridAmplitude = 0.20;  // sine-wave jitter amplitude (0.0-0.5)
+    int m_bgPatternType = 0;
+    QColor m_bgPatternColor = QColor(120, 120, 120);
+    double m_bgPatternScale = 1.0;
+    double m_bgPatternRotation = 0.0;
+    double m_bgPatternSpacing = 0.0;
+    bool m_bgPatternRandomRotate = false;
+    bool m_bgPatternJitter = false;
+    double m_bgPatternGridAmplitude = 0.20;
     bool m_bgPatternMixEnabled = false;
-    QList<int> m_bgPatternMixMotifs;  // indices into motif list for mix mode
-
-    QImage m_blurBuf;               // pre-allocated temp buffer for blur passes
+    QList<int> m_bgPatternMixMotifs;
 
     // ── Smart Auto state ──
     ImageStats m_imageStats;
@@ -380,21 +440,28 @@ private:
     // ── Async preview state ──
     QString m_lastPreviewUrl;
     QAtomicInt m_nextRenderId{1};
-    int m_currentRenderId = 0;
+    int m_currentRenderId = 0;   // main-thread only (documented invariant, B10)
 
-    // ── Cached pattern thumbnails ──
+    // ── Caches ──
     mutable QHash<int, QString> m_geometricThumbnailCache;
     mutable QHash<int, QString> m_motifThumbnailCache;
     mutable QHash<int, QString> m_svgGeoThumbnailCache;
+    QHash<QString, QImage> m_renderTileCache;   // Q14: rendered pattern tiles
 
-    bool processSingleImage(const QString &sourcePath, QString &outPath);
-    QImage renderWallpaper(const QImage &src, int W, int H, bool highQuality = false);
-    QColor extractAverageColor(const QImage &image);
-    QPair<QColor, QColor> extractHarmonizedColors(const QImage &image, int mood = 0);
+    /// Build a fully-resolved snapshot from current member state + source.
+    /// Must be called on the main thread (reads members, resolves mood colors).
+    RenderSnapshot captureSnapshot(const QImage &src, int W, int H);
+
     void computeMoodPalettes(const QImage &image);
     void computeMoodPalettesV2(const QImage &image);
+    QPair<QColor, QColor> extractHarmonizedColors(const QImage &image, int mood = 0);
+    /// Thread-safe mood resolution for worker tasks (locks m_moodMutex).
+    QPair<QColor, QColor> resolveMoodColors(const QImage &image, int mood, bool useV2);
 
-    /// 3D RGB histogram centroid (for V2)
+    // ── Param serialization (shared by presets F2 and undo F6) ──
+    QVariantMap serializeParams() const;
+    void deserializeParams(const QVariantMap &m);
+
     struct Centroid3D {
         double r, g, b;
         double score;
@@ -402,92 +469,58 @@ private:
         int count;
     };
 
-    /// Scale source image down if both dimensions exceed the target (2/5 iteration)
     static QImage limitImageSize(const QImage &src, int maxW, int maxH);
 
-public:
+    /// Decode a flat bgPatternType into a PatternRef (Q3). Single decode site.
+    static PatternRef decodePatternType(int flat);
 
-    /// Gaussian blur via 3-pass box blur approximation (O(n), radius-independent)
+    /// Static adaptive pattern overlay used by renderCore (thread-safe).
+    static void renderAdaptivePatternStatic(QImage &output, const RenderSnapshot &rs,
+                                            QHash<QString, QImage> *tileCache = nullptr);
+
+public:
+    /// True separable Gaussian blur + float saturation/overlay/brightness.
+    /// Replaces the old O(n) box cascade (which caused gradient banding).
     static void stackBlur(QImage &image, double sigma,
                           double saturationFactor = 0.0,
                           double overlayOpacity = 0.0,
                           QRgb overlayColor = 0,
                           double brightness = 1.0);
-    /// Multi-threaded horizontal box blur pass
-    static void boxBlurH(QImage &dst, const QImage &src, int radius);
-    /// Multi-threaded vertical box blur pass
-    static void boxBlurV(QImage &dst, const QImage &src, int radius);
-    /// Ensure noise texture is allocated (lazy init)
-    static void ensureNoiseTexture(int w, int h);
-    static QImage s_noiseTexture;       // shared pre-generated noise
 
-    /// Aspect ratios indexed by mode. 0=Free (0.0), 1=1:1, 2=4:3, 3=16:9, 4=16:10, 5=21:9, 6=32:9
+    /// Unified render core (Q1). Thread-safe: reads only the snapshot.
+    /// Public so it can be exercised by tests and embedded callers.
+    static QImage renderCore(const RenderSnapshot &rs,
+                             double *outMinZoom = nullptr,
+                             double *outMaxZoom = nullptr,
+                             QHash<QString, QImage> *tileCache = nullptr);
+
     static constexpr double s_aspectRatios[7] = {0.0, 1.0, 4.0/3.0, 16.0/9.0, 16.0/10.0, 21.0/9.0, 32.0/9.0};
 
-    /// Gradient preset data
     struct GradientPreset {
-        const char *name;   // i18n key
+        const char *name;
         QRgb color1;
         QRgb color2;
     };
     static const GradientPreset s_presets[12];
 
-    // ── Pattern constants ──
     static constexpr int GEOMETRIC_PATTERN_COUNT = 8;
     static constexpr int MOTIF_OFFSET = 100;
     static constexpr int MOTIF_PATTERN_COUNT = 88;
     static constexpr int SVG_GEO_OFFSET = 50;
     static constexpr int SVG_GEO_COUNT = 16;
 
-    // ── Pattern generation ──
-    /// Main entry: render a pattern onto the full output canvas
-    void renderPatternBackground(QPainter &p, int W, int H);
+    // Pattern tile generators — static (no member state; Q2 dedup). The
+    // thumbnail and adaptive-pattern paths both call these; the old `make*Tile`
+    // statics were byte-identical duplicates and are gone.
+    static QImage generateGeometricTile(int type, int tileSize, const QColor &bg, const QColor &fg, double scale);
+    static QImage generateSvgGeoTile(int index, int tileSize, const QColor &bg, const QColor &fg, double scale);
+    static QImage generateMotifTile(int motifIndex, int tileSize, const QColor &bg, const QColor &fg, double scale);
 
-    /// Generate a tile for a geometric pattern
-    QImage generateGeometricTile(int type, int tileSize, const QColor &bg, const QColor &fg, double scale);
-
-    /// Generate a tile for an SVG geometric primitive
-    QImage generateSvgGeoTile(int index, int tileSize, const QColor &bg, const QColor &fg, double scale);
-
-    /// Generate a tile for a motif (icon) pattern
-    QImage generateMotifTile(int motifIndex, int tileSize, const QColor &bg, const QColor &fg, double scale);
-
-    /// Generate a tile for mixed motifs
-    QImage generateMixedTile(const QList<int> &motifIndices, int tileSize, const QColor &bg, const QColor &fg, double scale);
-
-    /// Build a QPainterPath for a motif icon (normalized to 100x100 viewport)
-    static QPainterPath buildMotifPath(int index);
-
-    /// Render a single icon path onto a canvas at a given position and size
-    static void renderIcon(QPainter &p, const QPainterPath &path,
-                           double cx, double cy, double size, const QColor &color);
-
-    /// Generate a thumbnail image for a pattern type (used in UI)
-    QImage generatePatternThumbnail(int type, int thumbSize) const;
-
-    /// Render a single motif icon to a small image for thumbnails
-    QImage renderMotifIcon(int index, int size) const;
-
-    /// Render gradient or solid background (shared by pattern and gradient modes)
-    void renderGradientOrSolid(QPainter &p, QImage &output, const QImage &src, int W, int H);
-
-    /// Render pattern tiles on top of background, sampling per-tile for adaptive coloring
-    void renderAdaptivePattern(QPainter &p, const QImage &background, int W, int H);
-
-    /// Helper: tile an image across the output
-    static void tileImage(QPainter &p, const QImage &tile, int W, int H);
-
-    /// Geometric pattern names
     static const char *s_geometricNames[GEOMETRIC_PATTERN_COUNT];
-    /// SVG geometric primitive names
     static const char *s_svgGeoNames[SVG_GEO_COUNT];
-    /// Motif pattern names (in categories: animals, critters, nature, music, celestial, whimsical)
     static const char *s_motifNames[MOTIF_PATTERN_COUNT];
-    /// Motif category mapping (0=animals, 1=nature, 2=music, 3=celestial, 4=whimsical)
     static const int s_motifCategories[MOTIF_PATTERN_COUNT];
-    /// SVG resource filenames for each motif (without extension)
     static const char *s_motifSvgFiles[MOTIF_PATTERN_COUNT];
-    /// Category names
     static const char *s_categoryNames[6];
 };
 

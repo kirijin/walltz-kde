@@ -38,6 +38,29 @@ Kirigami.ApplicationWindow {
                 onTriggered: processor.processQueue(dropArea.filePaths)
             },
             Kirigami.Action {
+                text: i18n("Set as wallpaper")
+                icon.name: "preferences-desktop-wallpaper"
+                enabled: dropArea.fileCount === 1
+                         && widthInput.length > 0 && heightInput.length > 0
+                         && !processor.busy
+                onTriggered: processor.processAndSetWallpaper(dropArea.filePaths[0])
+            },
+            Kirigami.Action {
+                text: i18n("Undo tweaks")
+                icon.name: "edit-undo"
+                enabled: dropArea.fileCount > 0
+                onTriggered: {
+                    processor.restoreState()
+                    previewDebounce.restart()
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Presets")
+                icon.name: "bookmarks"
+                displayHint: Kirigami.DisplayHint.KeepVisible
+                onTriggered: presetDialog.open()
+            },
+            Kirigami.Action {
                 text: i18n("Quit")
                 icon.name: "application-exit"
                 shortcut: "Ctrl+Q"
@@ -106,6 +129,8 @@ Kirigami.ApplicationWindow {
 
                         onDropped: function (drop) {
                             if (drop.hasUrls && drop.urls.length > 0) {
+                                // F6: anchor the undo state before any tweaking
+                                processor.rememberState();
                                 var entries = [];
                                 var paths = [];
                                 for (var i = 0; i < drop.urls.length; ++i) {
@@ -268,7 +293,12 @@ Kirigami.ApplicationWindow {
                             }
 
                             Controls.ProgressBar {
-                                indeterminate: true
+                                // Determinate when a real queue is running (H6),
+                                // indeterminate only as a fallback.
+                                indeterminate: processor.queueSize === 0
+                                from: 0
+                                to: processor.queueSize
+                                value: processor.queueProgress
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: 200
                             }
@@ -373,15 +403,15 @@ Kirigami.ApplicationWindow {
                     onClicked: {
                         processor.vignetteStrength = 0.0
                         processor.grainStrength = 0.0
-                        processor.blurRadius = 90
-                        processor.saturationFactor = 1.8
-                        processor.bgZoom = 1.0
-                        processor.bgBlurAngle = 0.0
-                        processor.gradientAngle = 45.0
+                        processor.blurRadius = processor.defaultBlurRadius()
+                        processor.saturationFactor = processor.defaultSaturation()
+                        processor.bgZoom = processor.defaultBgZoom()
+                        processor.bgBlurAngle = processor.defaultBgBlurAngle()
+                        processor.gradientAngle = processor.defaultGradientAngle()
                         processor.caStrength = 0.0
-                        processor.fgZoom = 0.8
-                        processor.pipZoom = 1.0
-                        processor.photoFrameWidth = 0
+                        processor.fgZoom = processor.defaultFgZoom()
+                        processor.pipZoom = processor.defaultPipZoom()
+                        processor.photoFrameWidth = processor.defaultPhotoFrameWidth()
                         processor.photoFrame = false
                         previewDebounce.restart()
                     }
@@ -1311,7 +1341,7 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.blurRadius = 90
+                            processor.blurRadius = processor.defaultBlurRadius()
                             previewDebounce.restart()
                         }
                     }
@@ -1335,7 +1365,7 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.saturationFactor = 1.8
+                            processor.saturationFactor = processor.defaultSaturation()
                             previewDebounce.restart()
                         }
                     }
@@ -1357,7 +1387,7 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.bgBlurAngle = 0.0
+                            processor.bgBlurAngle = processor.defaultBgBlurAngle()
                             previewDebounce.restart()
                         }
                     }
@@ -1396,7 +1426,7 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.bgZoom = 1.0
+                            processor.bgZoom = processor.defaultBgZoom()
                             previewDebounce.restart()
                         }
                     }
@@ -1420,7 +1450,7 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.fgZoom = 0.8
+                            processor.fgZoom = processor.defaultFgZoom()
                             previewDebounce.restart()
                         }
                     }
@@ -1445,7 +1475,7 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.pipZoom = 1.0
+                            processor.pipZoom = processor.defaultPipZoom()
                             previewDebounce.restart()
                         }
                     }
@@ -1489,7 +1519,7 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.gradientAngle = 45.0
+                            processor.gradientAngle = processor.defaultGradientAngle()
                             previewDebounce.restart()
                         }
                     }
@@ -1640,6 +1670,68 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    // Presets dialog (F2 — named parameter presets)
+    Kirigami.Dialog {
+        id: presetDialog
+        title: i18n("Parameter presets")
+        preferredWidth: Kirigami.Units.gridUnit * 20
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            Controls.TextField {
+                id: presetNameField
+                Layout.fillWidth: true
+                placeholderText: i18n("New preset name")
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                Controls.Button {
+                    text: i18n("Save current")
+                    Layout.fillWidth: true
+                    onClicked: {
+                        var n = presetNameField.text.trim()
+                        if (n.length > 0) {
+                            processor.saveParamPreset(n)
+                            presetNameField.text = ""
+                        }
+                    }
+                }
+                Controls.Button {
+                    text: i18n("Delete selected")
+                    Layout.fillWidth: true
+                    enabled: presetList.currentIndex >= 0
+                    onClicked: {
+                        if (presetList.currentIndex >= 0)
+                            processor.deleteParamPreset(presetList.model[presetList.currentIndex])
+                    }
+                }
+            }
+
+            Controls.ListView {
+                id: presetList
+                Layout.fillWidth: true
+                Layout.preferredHeight: 160
+                clip: true
+                model: processor.paramPresetNames
+
+                delegate: Controls.ItemDelegate {
+                    required property string modelData
+                    width: presetList.width
+                    text: modelData
+                    highlighted: presetList.currentIndex === index
+                    onClicked: {
+                        presetList.currentIndex = index
+                        processor.applyParamPreset(modelData)
+                    }
+                }
+            }
+        }
+    }
+
     // Processor
     WallpaperProcessor {
         id: processor
@@ -1744,41 +1836,17 @@ Kirigami.ApplicationWindow {
             if (dropArea.fileList.length > 0 && dropArea.fileList[0].path === sourcePath)
                 crossfadePreview(previewUrl)
         }
-        function onBlurRadiusChanged() { previewDebounce.restart(); }
-        function onSaturationFactorChanged() { previewDebounce.restart(); }
-        function onOverlayOpacityChanged() { previewDebounce.restart(); }
-        function onOverlayColorChanged() { previewDebounce.restart(); }
-        function onBlurBrightnessChanged() { previewDebounce.restart(); }
-        function onBlurPresetIdChanged() { previewDebounce.restart(); }
-        function onBgGradientStyleChanged() { previewDebounce.restart(); }
-        function onBgGradientPresetChanged() { previewDebounce.restart(); }
-        function onGradientAngleChanged() { previewDebounce.restart(); }
-        function onBgZoomChanged() { previewDebounce.restart(); }
-        function onBgBlurAngleChanged() { previewDebounce.restart(); }
-        function onBlurModeChanged() { previewDebounce.restart(); }
-        function onAutoColorChanged() { previewDebounce.restart(); }
-        function onBackgroundColorChanged() { previewDebounce.restart(); }
-        function onAspectModeChanged() { previewDebounce.restart(); }
-        function onAutoMoodChanged() { previewDebounce.restart(); }
-        function onVignetteStrengthChanged() { previewDebounce.restart(); }
-        function onGrainStrengthChanged() { previewDebounce.restart(); }
-        function onCaStrengthChanged() { previewDebounce.restart(); }
-        function onPhotoFrameChanged() { previewDebounce.restart(); }
-        function onPhotoFrameWidthChanged() { previewDebounce.restart(); }
-        function onBgPatternEnabledChanged() { previewDebounce.restart(); }
-        function onBgPatternTypeChanged() { previewDebounce.restart(); }
-        function onBgPatternColorChanged() { previewDebounce.restart(); }
-        function onBgPatternScaleChanged() { previewDebounce.restart(); }
-        function onBgPatternRotationChanged() { previewDebounce.restart(); }
-        function onBgPatternMixEnabledChanged() { previewDebounce.restart(); }
-        function onBgPatternMixMotifsChanged() { previewDebounce.restart(); }
-        function onTargetWidthChanged() {
+        // Single aggregate signal drives the live preview (Q2) — one handler
+        // replaces the previous 28 per-parameter handlers.
+        function onRenderParamsChanged() {
             previewDebounce.restart();
-            widthInput.text = processor.targetWidth;
-        }
-        function onTargetHeightChanged() {
-            previewDebounce.restart();
-            heightInput.text = processor.targetHeight;
+            // Keep the width/height fields in sync when the backend recalculates
+            // them (aspect-ratio presets, screen detect). Guard against clobbering
+            // an in-progress edit (Q16).
+            if (!widthInput.activeFocus)
+                widthInput.text = processor.targetWidth;
+            if (!heightInput.activeFocus)
+                heightInput.text = processor.targetHeight;
         }
     }
 }
