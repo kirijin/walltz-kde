@@ -1812,7 +1812,7 @@ QString WallpaperProcessor::moodNameV2(int index) const
 {
     static const char *names[] = {
         QT_TRANSLATE_NOOP("WP", "Dynamic"), QT_TRANSLATE_NOOP("WP", "Tonal"),
-        QT_TRANSLATE_NOOP("WP", "Vivid"), QT_TRANSLATE_NOOP("WP", "Ember"),
+        QT_TRANSLATE_NOOP("WP", "Vibrant"), QT_TRANSLATE_NOOP("WP", "Ember"),
         QT_TRANSLATE_NOOP("WP", "Glacier"), QT_TRANSLATE_NOOP("WP", "Shadow")
     };
     if (index < 0 || index >= 6) return {};
