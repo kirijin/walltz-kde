@@ -142,7 +142,7 @@ static int runHeadlessMain(QCoreApplication &app)
     QCoreApplication::setOrganizationName(QStringLiteral("Walltz"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("walltz.app"));
     QCoreApplication::setApplicationName(QStringLiteral("walltz"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.2.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.3.0"));
     KLocalizedString::setApplicationDomain("walltz");
 
     QCommandLineParser parser;
@@ -178,7 +178,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName(QStringLiteral("Walltz"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("walltz.app"));
     QCoreApplication::setApplicationName(QStringLiteral("walltz"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.2.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.3.0"));
     QApplication::setApplicationDisplayName(i18n("Walltz"));
 
     // CLI options double as GUI flags: --help/--version must work here too.
