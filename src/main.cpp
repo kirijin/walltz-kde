@@ -43,6 +43,12 @@ static int runCli(QCoreApplication &app, const QCommandLineParser &parser)
         proc.setBlurMode(false);
     if (parser.isSet(QStringLiteral("blur-radius")))
         proc.setBlurRadius(parser.value(QStringLiteral("blur-radius")).toInt());
+    if (parser.isSet(QStringLiteral("blur-preset"))) {
+        const QString want = parser.value(QStringLiteral("blur-preset"));
+        for (int i = 0; i < blurPresetCount(); ++i) {
+            if (blurPresetId(i) == want) { proc.setBlurPresetIndex(i); break; }
+        }
+    }
     if (parser.isSet(QStringLiteral("saturation")))
         proc.setSaturationFactor(parser.value(QStringLiteral("saturation")).toDouble());
     if (parser.isSet(QStringLiteral("bg-zoom")))
@@ -116,6 +122,7 @@ static void addCliOptions(QCommandLineParser &parser)
         { QStringLiteral("blur"), i18n("Use blur background (default)") },
         { QStringLiteral("no-blur"), i18n("Use colour/gradient background") },
         { QStringLiteral("blur-radius"), i18n("Blur radius (0 = auto)"), QStringLiteral("px") },
+        { QStringLiteral("blur-preset"), i18n("Blur preset id (default/auto/serenity/focus/comfort/apple/gnome/mica/acrylic/reddit)"), QStringLiteral("id") },
         { QStringLiteral("saturation"), i18n("Saturation factor"), QStringLiteral("x") },
         { QStringLiteral("bg-zoom"), i18n("Background zoom"), QStringLiteral("x") },
         { QStringLiteral("gradient-angle"), i18n("Gradient angle (deg)"), QStringLiteral("deg") },
@@ -142,7 +149,7 @@ static int runHeadlessMain(QCoreApplication &app)
     QCoreApplication::setOrganizationName(QStringLiteral("Walltz"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("walltz.app"));
     QCoreApplication::setApplicationName(QStringLiteral("walltz"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.3.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.3.1"));
     KLocalizedString::setApplicationDomain("walltz");
 
     QCommandLineParser parser;
@@ -178,7 +185,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName(QStringLiteral("Walltz"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("walltz.app"));
     QCoreApplication::setApplicationName(QStringLiteral("walltz"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.3.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.3.1"));
     QApplication::setApplicationDisplayName(i18n("Walltz"));
 
     // CLI options double as GUI flags: --help/--version must work here too.

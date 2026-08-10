@@ -8,7 +8,8 @@
 #include <QColor>
 
 /// Parameter set for a named blur preset.
-/// Each entry drives the existing pipeline (sigma, sat, dither) + overlay + brightness.
+/// Each entry drives the existing pipeline (sigma, sat, dither) + overlay + brightness,
+/// plus the optional built-in photo frame (width % of min dim; Reddit uses 1%).
 struct BlurConfig {
     const char *id;          // "default", "apple", "gnome", "mica", "acrylic", "reddit"
     const char *displayName; // "Default", "Apple", "GNOME", "Mica", "Acrylic", "Reddit"
@@ -20,6 +21,11 @@ struct BlurConfig {
     QRgb  overlayColor  = 0;       // sRGB, unused when overlayOpacity == 0
     double vignette     = 0.0;
     double grain        = 0.0;
+
+    // Frame carried by the preset — uses the built-in matte frame (no new style).
+    // Reddit forces it on at 1% width; every other preset leaves it OFF.
+    bool frameEnabled   = false;
+    int  frameWidthPct  = 0;       // frame width % of min dim (Reddit: 1)
 
     /// The "Default" preset is the immutable factory baseline — must not be overwritten.
     bool isLocked() const { return qstrcmp(id, "default") == 0; }

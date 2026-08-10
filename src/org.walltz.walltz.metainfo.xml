@@ -47,6 +47,16 @@
   <metadata_license>CC0-1.0</metadata_license>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.1" date="2026-08-11">
+      <description>
+        <p>Reddit preset now matches the real Reddit lightbox</p>
+        <ul>
+          <li>Backdrop is the photo itself, blurred and dimmed over a dark neutral — the lightbox is dark, not light</li>
+          <li>Photo frame on by default at a thin 1% width; corner rounding unchanged</li>
+          <li>Presets fully own the frame: no frame leaks between presets</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-08-01">
       <description>
         <p>Pattern backgrounds and zoom that respects the frame</p>

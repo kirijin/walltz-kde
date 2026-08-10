@@ -915,7 +915,7 @@ QImage WallpaperProcessor::renderCore(const RenderSnapshot &rs,
         p.drawImage(0, 0, sh);
     }
 
-    // ── Photo frame ──
+    // ── Photo frame (built-in matte: white fill + light-gray outline) ──
     if (rs.photoFrame) {
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(Qt::NoPen);
@@ -2181,6 +2181,10 @@ void WallpaperProcessor::setBlurPresetIndex(int index)
     m_blurBrightness   = cfg.brightness;
     m_vignetteStrength = cfg.vignette;
     m_grainStrength    = cfg.grain;
+    // Frame is owned by the preset: Reddit forces the built-in frame ON at its
+    // width; every other preset means frame OFF (so no frame leaks between presets).
+    m_photoFrame      = cfg.frameEnabled;
+    m_photoFrameWidth = cfg.frameEnabled ? cfg.frameWidthPct : 0;
     Q_EMIT blurPresetIdChanged();
     Q_EMIT renderParamsChanged();
 }
@@ -2196,6 +2200,8 @@ void WallpaperProcessor::resetBlurToDefault()
     m_blurBrightness   = WalltzDefaults::blurBrightness;
     m_vignetteStrength = WalltzDefaults::vignetteStrength;
     m_grainStrength    = WalltzDefaults::grainStrength;
+    m_photoFrame   = false;    // Default = no frame at all (factory baseline)
+    m_photoFrameWidth = 0;
     Q_EMIT blurPresetIdChanged();
     Q_EMIT renderParamsChanged();
 }
@@ -2214,6 +2220,9 @@ void WallpaperProcessor::computeSmartAutoAndApply()
     m_overlayColor     = QColor::fromRgb(p.overlayColor);
     m_vignetteStrength = p.vignette;
     m_grainStrength    = p.grain;
+    // Auto computes blur params only — frame must be OFF (no preset frame spec).
+    m_photoFrame   = false;
+    m_photoFrameWidth = 0;
     Q_EMIT blurPresetIdChanged();
     Q_EMIT renderParamsChanged();
 }
