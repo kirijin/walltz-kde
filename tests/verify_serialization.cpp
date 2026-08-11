@@ -120,43 +120,6 @@ int main(int argc, char **argv)
           "B3 preset: pattern params restored from QSettings");
     p.deleteParamPreset(QStringLiteral("verify-b3-preset"));
 
-    // ── Phase 2: overlay path handling + serialization ──
-    // Missing asset -> path stays empty (never silently accepted).
-    p.setTexturePath(QStringLiteral("/nonexistent/definitely-not-here.png"));
-    CHECK(p.texturePath().isEmpty(), "overlay: missing asset keeps path empty");
-
-    // Real asset -> set + F6 round-trip + F2 round-trip.
-    const QString tmpOverlay = QDir::tempPath() + QStringLiteral("/walltz-verify-overlay.png");
-    QImage ov(16, 16, QImage::Format_ARGB32_Premultiplied);
-    ov.fill(QColor(200, 100, 50));
-    if (!ov.save(tmpOverlay, "PNG")) {
-        CHECK(false, "overlay: could not create temp asset");
-    } else {
-        p.setTexturePath(tmpOverlay);
-        CHECK(p.texturePath() == tmpOverlay, "overlay: real asset accepted");
-        p.setTextureOpacity(0.42);
-        p.rememberState();
-        p.setTexturePath(QString());
-        p.setTextureOpacity(0.0);
-        p.restoreState();
-        CHECK(p.texturePath() == tmpOverlay, "F6 undo: overlay path restored");
-        CHECK(qFuzzyCompare(p.textureOpacity(), 0.42), "F6 undo: overlay opacity restored");
-
-        p.saveParamPreset(QStringLiteral("verify-overlay-preset"));
-        p.setTexturePath(QString());
-        p.setTextureOpacity(0.0);
-        p.applyParamPreset(QStringLiteral("verify-overlay-preset"));
-        CHECK(p.texturePath() == tmpOverlay, "F2 preset: overlay path restored");
-        CHECK(qFuzzyCompare(p.textureOpacity(), 0.42), "F2 preset: overlay opacity restored");
-        p.deleteParamPreset(QStringLiteral("verify-overlay-preset"));
-
-        // Clear path and verify the resolved image is dropped too (render must
-        // be unaffected by a previously set overlay).
-        p.setTexturePath(QString());
-        CHECK(p.texturePath().isEmpty(), "overlay: clear path");
-        QFile::remove(tmpOverlay);
-    }
-
     // ── Holistic looks in the blur preset table: apply + locked-default + F6 ──
     p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Polaroid));   // sat 1.0, γ 0.94, warm -0.04, frame 3%
     CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "look: polaroid applies gamma 0.94");
@@ -164,48 +127,20 @@ int main(int argc, char **argv)
     CHECK(qFuzzyCompare(p.saturationFactor(), 1.0), "look: polaroid applies satBoost 1.0");
     CHECK(p.photoFrame() && p.photoFrameWidth() == 3, "look: polaroid applies frame 3%");
     CHECK(p.photoGrade(), "look: polaroid turns photo grading on");
+    CHECK(p.textureKind() == 2 && p.textureOverPhoto() && qFuzzyCompare(p.textureOpacity(), 1.0)
+          && p.textureBlendMode() == 0, "look: polaroid carries its procedural frame");
     CHECK(p.blurPresetIndex() == static_cast<int>(BlurPresetId::Polaroid), "look: preset index tracked");
     // F6 undo keeps the look state.
     p.rememberState();
     p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Default));   // locked -> factory reset
     CHECK(p.photoGrade() == false, "look: default clears photo grade");
+    CHECK(p.textureKind() == 0, "look: default clears texture");
     CHECK(p.photoFrame() == false, "look: default clears frame");
     CHECK(qFuzzyCompare(p.colorGamma(), 1.0), "look: default clears grade");
     p.restoreState();
     CHECK(p.photoGrade(), "F6 undo: look photo grade restored");
+    CHECK(p.textureKind() == 2, "F6 undo: look texture restored");
     CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "F6 undo: look grade restored");
-
-    // ── Dropzone: importOverlayFile copies, uniquifies, validates ──
-    {
-        const QString src1 = QDir::tempPath() + QStringLiteral("/walltz-import-a.png");
-        const QString bad  = QDir::tempPath() + QStringLiteral("/walltz-import.txt");
-        QImage img(8, 8, QImage::Format_ARGB32_Premultiplied);
-        img.fill(QColor(10, 20, 30));
-        img.save(src1, "PNG");
-        QFile f(bad);
-        f.open(QIODevice::WriteOnly);
-        f.write("nope");
-        f.close();
-
-        CHECK(p.importOverlayFile(src1), "drop: png accepted");
-        const QString first = p.texturePath();
-        CHECK(QFileInfo(first).suffix() == QStringLiteral("png"), "drop: imported path is a png");
-        CHECK(QFile::exists(first), "drop: file copied into overlays dir");
-        CHECK(p.importOverlayFile(src1), "drop: duplicate name still imported");
-        const QString second = p.texturePath();
-        CHECK(second != first && QFileInfo(second).fileName().contains(QStringLiteral("-1.")),
-              "drop: duplicate uniquified to -1");
-        CHECK(!p.importOverlayFile(bad), "drop: .txt rejected");
-        CHECK(p.texturePath() == second, "drop: rejection keeps previous selection");
-        CHECK(p.textureCatalog().size() >= 2, "drop: catalog refreshed after import");
-
-        // Cleanup: remove the test overlays dir + temp sources, clear selection.
-        const QString dir = QFileInfo(first).absolutePath();
-        p.setTexturePath(QString());
-        QDir(dir).removeRecursively();
-        QFile::remove(src1);
-        QFile::remove(bad);
-    }
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);
     return failures == 0 ? 0 : 1;

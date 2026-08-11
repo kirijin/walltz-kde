@@ -215,55 +215,79 @@ int main(int argc, char **argv)
         CHECK(qAbs(c.red() - c.blue()) <= 2, "color-grade: neutral params leave gray neutral");
     }
 
-    // ── Texture overlay (Phase 2): asset + opacity + Multiply blend ──
-    QImage redOverlay(32, 32, QImage::Format_ARGB32_Premultiplied);
-    redOverlay.fill(QColor(255, 0, 0));
+    // ── Procedural overlay textures (looks): generator + placement ──
+    // Generator direct tests.
+    {
+        // kind 1 (light leak): alpha falls off from the top-right corner.
+        QImage tex = WallpaperProcessor::generateOverlayTexture(1, 0, 128, 128, 30, 30, 68, 68);
+        CHECK(tex.pixelColor(124, 4).alpha() > 60, "tex: leak strong near top-right");
+        CHECK(tex.pixelColor(124, 4).alpha() > tex.pixelColor(4, 4).alpha(),
+              "tex: leak falls off away from the corner");
+    }
+    {
+        // kind 2 (polaroid frame): white band hugging the rect, transparent center.
+        QImage tex = WallpaperProcessor::generateOverlayTexture(2, 0, 128, 128, 30, 30, 68, 68);
+        QColor topBand = tex.pixelColor(64, 24);    // inside pr.top..+bw (bw=10, pr.top=20)
+        QColor center = tex.pixelColor(64, 64);
+        CHECK(topBand.red() > 245 && topBand.green() > 245, "tex: polaroid top band is white");
+        CHECK(center.alpha() == 0, "tex: polaroid center is transparent");
+    }
+    {
+        // kind 3 (film border): dark at the edges, clear in the middle.
+        QImage tex = WallpaperProcessor::generateOverlayTexture(3, 0, 128, 128, 30, 30, 68, 68);
+        CHECK(tex.pixelColor(2, 64).alpha() > tex.pixelColor(64, 64).alpha(),
+              "tex: film border dark at the edges");
+    }
+    {
+        // kind 0: nothing.
+        QImage tex = WallpaperProcessor::generateOverlayTexture(0, 0, 128, 128, 30, 30, 68, 68);
+        CHECK(tex.isNull(), "tex: kind 0 returns null");
+    }
 
-    auto overlayRender = [&](double opacity, int blend) {
+    // Placement through renderCore (blurMode off, white background, gray photo).
+    auto texRender = [&](int kind, bool over, double opacity = 1.0) {
         RenderSnapshot rs;
         rs.W = 128; rs.H = 128;
         rs.blurMode = false;
         rs.bgGradientStyle = 0;
         rs.autoColor = false;
         rs.bgColor = 0xffffffff;   // white background
-        rs.textureImage = redOverlay;
+        rs.textureKind = kind;
         rs.textureOpacity = opacity;
-        rs.textureBlendMode = blend;
+        rs.textureOverPhoto = over;
         rs.sourceImage = flat;
         return WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
     };
-
     {
-        // Multiply at 100% on white -> pure red
-        QImage out = overlayRender(1.0, 13);   // 13 == CompositionMode_Multiply
-        QColor c = out.pixelColor(4, 4);
-        CHECK(c.red() > 250 && c.green() < 10 && c.blue() < 10,
-              "overlay: Multiply 100% red-on-white -> red");
+        // Leak UNDER the photo: background tinted warm top-right, photo clean.
+        QImage out = texRender(1, false);
+        QColor corner = out.pixelColor(124, 4);      // background, leak-strong zone
+        QColor center = out.pixelColor(64, 64);      // photo
+        CHECK(corner.red() > corner.blue(), "tex: leak under tints the background warm");
+        CHECK(qAbs(center.red() - center.blue()) <= 8,
+              "tex: leak under leaves the photo untinted (z-order locked)");
     }
     {
-        // Multiply at 50% -> red blended halfway toward white: (255, 127, 127)
-        QImage out = overlayRender(0.5, 13);
-        QColor c = out.pixelColor(4, 4);
-        CHECK(c.red() > 250 && qAbs(c.green() - 127) <= 3 && qAbs(c.blue() - 127) <= 3,
-              "overlay: Multiply 50% -> midpoint toward white");
+        // Leak OVER the photo: the photo itself gets the warm tint.
+        QImage out = texRender(1, true);
+        QColor center = out.pixelColor(64, 64);
+        CHECK(center.red() > center.blue(), "tex: leak over tints the photo itself");
     }
     {
-        // opacity 0 == no overlay at all (background stays white)
-        QImage out = overlayRender(0.0, 13);
+        // Film border under: the edge pixel darkens vs the same render with no
+        // texture (the center is the photo, not a valid background reference).
+        QImage plain = texRender(0, false);
+        QImage out = texRender(3, false);
+        auto lum = [](const QColor &c) { return c.red() + c.green() + c.blue(); };
+        CHECK(lum(out.pixelColor(2, 64)) < lum(plain.pixelColor(2, 64)),
+              "tex: film border darkens the edges");
+    }
+    {
+        // No texture (kind 0): background stays pure white.
+        QImage out = texRender(0, false);
         QColor c = out.pixelColor(4, 4);
         CHECK(c.red() > 250 && c.green() > 250 && c.blue() > 250,
-              "overlay: opacity 0 leaves background untouched");
-    }
-    {
-        // Z-ORDER LOCK (reviewer Demonstration): with a texture at 100% and a
-        // photo on top, the canvas CENTER must show the photo (gray), not the
-        // texture (red) — the overlay is drawn UNDER the foreground. A future
-        // move of the draw block after the foreground flips this and every
-        // margin-pixel test above still passes; this one fails.
-        QImage out = overlayRender(1.0, 13);
-        QColor c = out.pixelColor(64, 64);   // canvas center == photo area
-        CHECK(c.red() > 60 && c.red() < 160 && c.green() > 60 && c.green() < 160,
-              "overlay: texture stays UNDER the foreground photo (z-order locked)");
+              "tex: kind 0 leaves the background untouched");
     }
 
     // ── Retro look (4th tab): photo-grade + texture placement ──
@@ -303,45 +327,8 @@ int main(int argc, char **argv)
               "look: satBoost 0 renders the photo grayscale (B&W look)");
     }
     {
-        // textureOverPhoto: the texture draws ON TOP of the photo. The photo
-        // here is flat gray (128) — Multiply with red gives (128, 0, 0):
-        // green/blue crushed proves the multiply ran OVER the photo; a
-        // non-running block would leave green ≈ 128.
-        RenderSnapshot rs;
-        rs.W = 128; rs.H = 128;
-        rs.blurMode = false;
-        rs.bgGradientStyle = 0;
-        rs.autoColor = false;
-        rs.bgColor = 0xffffffff;
-        rs.textureImage = redOverlay;
-        rs.textureOpacity = 1.0;
-        rs.textureBlendMode = 13;
-        rs.textureOverPhoto = true;
-        rs.sourceImage = flat;
-        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
-        QColor c = out.pixelColor(64, 64);
-        CHECK(qAbs(c.red() - 128) <= 10 && c.green() < 20 && c.blue() < 20,
-              "look: textureOverPhoto multiplies red OVER the gray photo");
-    }
-    {
-        // textureOverPhoto=false (default): texture stays UNDER the photo.
-        RenderSnapshot rs;
-        rs.W = 128; rs.H = 128;
-        rs.blurMode = false;
-        rs.bgGradientStyle = 0;
-        rs.autoColor = false;
-        rs.bgColor = 0xffffffff;
-        rs.textureImage = redOverlay;
-        rs.textureOpacity = 1.0;
-        rs.textureBlendMode = 13;
-        rs.sourceImage = flat;
-        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
-        QColor c = out.pixelColor(64, 64);
-        CHECK(c.red() < 200 && c.blue() > 60,
-              "look: texture stays under the photo by default");
-    }
-    // Look table sanity: every photoGrade row in range.
-    {
+        // Look table sanity: every photoGrade row in range, every look has a
+        // texture kind (procedural overlays are part of the look).
         int lookRows = 0;
         for (int i = 0; i < blurPresetCount(); ++i) {
             const BlurConfig &l = blurPresetConfig(i);
@@ -352,6 +339,7 @@ int main(int argc, char **argv)
             CHECK(l.warmth >= -1.0 && l.warmth <= 1.0, "look: warmth in range");
             CHECK(l.blackLift >= 0.0 && l.blackLift <= 1.0, "look: blackLift in range");
             CHECK(l.frameWidthPct >= 0 && l.frameWidthPct <= 25, "look: frame width in range");
+            CHECK(l.textureKind >= 1 && l.textureKind <= 3, "look: every look carries a texture kind");
         }
         CHECK(lookRows == 5, "look: exactly 5 photoGrade rows");
     }

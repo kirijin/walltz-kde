@@ -33,15 +33,16 @@ struct BlurConfig {
     double blackLift  = 0.0;       // shadow floor 0..1 (faded-film look)
 
     // Holistic look fields (2026-08-11): photo-grade + texture composition.
-    // photoGrade rows are full photo looks: the grade applies to the PHOTO
-    // itself (and its blurred background), the texture (if any) resolves
-    // against the user's overlays dir at apply time. Non-look rows never
-    // touch texture state.
-    const char *textureAsset = nullptr;  // file name in overlays dir
+    // textureKind selects a PROCEDURALLY generated overlay (no user assets —
+    // licensing-safe, resolution-independent, nothing to drop): 0 = none,
+    // 1 = light leak, 2 = polaroid frame, 3 = film border. textureColor tints
+    // the leak/border; photoGrade rows apply the grade to the PHOTO itself.
+    int    textureKind = 0;           // 0 none, 1 leak, 2 polaroid, 3 film border
     double textureOpacity = 0.0;
-    int    textureBlendMode = 13;        // QPainter CompositionMode
-    bool   textureOverPhoto = false;     // draw the texture ON TOP of the photo
-    bool   photoGrade = false;           // look: grade the photo itself
+    int    textureBlendMode = 13;     // QPainter CompositionMode
+    bool   textureOverPhoto = false;  // draw the texture ON TOP of the photo
+    QRgb   textureColor = 0;          // leak/border tint (0 = default)
+    bool   photoGrade = false;        // look: grade the photo itself
 
     /// The "Default" preset is the immutable factory baseline — must not be overwritten.
     bool isLocked() const { return qstrcmp(id, "default") == 0; }

@@ -108,11 +108,12 @@ struct RenderSnapshot {
     double colorGamma = WalltzDefaults::colorGamma;
     double colorWarmth = WalltzDefaults::colorWarmth;
     double colorBlackLift = WalltzDefaults::colorBlackLift;
-    QImage textureImage;                  // resolved main-thread; null = no overlay
     double textureOpacity = 0.0;
     int    textureBlendMode = WalltzDefaults::textureBlendMode;
     bool   textureOverPhoto = false;      // draw the texture ON TOP of the photo
     bool   photoGrade = false;            // apply sat+grade to the foreground photo
+    int    textureKind = 0;               // 0 none, 1 leak, 2 polaroid, 3 film border
+    QRgb   textureColor = 0;              // leak/border tint (0 = default)
     bool   photoFrame = false;
     int    photoFrameWidth = WalltzDefaults::photoFrameWidth;
     double fgZoom = WalltzDefaults::fgZoom;
@@ -160,8 +161,6 @@ class WallpaperProcessor : public QObject
     Q_PROPERTY(double vignetteStrength READ vignetteStrength WRITE setVignetteStrength NOTIFY renderParamsChanged)
     Q_PROPERTY(double grainStrength READ grainStrength WRITE setGrainStrength NOTIFY renderParamsChanged)
     Q_PROPERTY(double caStrength READ caStrength WRITE setCaStrength NOTIFY renderParamsChanged)
-    Q_PROPERTY(QString texturePath READ texturePath WRITE setTexturePath NOTIFY renderParamsChanged)
-    Q_PROPERTY(double textureOpacity READ textureOpacity WRITE setTextureOpacity NOTIFY renderParamsChanged)
     Q_PROPERTY(bool photoFrame READ photoFrame WRITE setPhotoFrame NOTIFY renderParamsChanged)
     Q_PROPERTY(int photoFrameWidth READ photoFrameWidth WRITE setPhotoFrameWidth NOTIFY renderParamsChanged)
     Q_PROPERTY(double fgZoom READ fgZoom WRITE setFgZoom NOTIFY renderParamsChanged)
@@ -225,9 +224,11 @@ public:
     double vignetteStrength() const { return m_vignetteStrength; }
     double grainStrength() const { return m_grainStrength; }
     double caStrength() const { return m_caStrength; }
-    QString texturePath() const { return m_texturePath; }
+    int textureKind() const { return m_textureKind; }
+    QRgb textureColor() const { return m_textureColor; }
     double textureOpacity() const { return m_textureOpacity; }
     int textureBlendMode() const { return m_textureBlendMode; }
+    bool textureOverPhoto() const { return m_textureOverPhoto; }
     bool photoGrade() const { return m_photoGrade; }
     bool photoFrame() const { return m_photoFrame; }
     int photoFrameWidth() const { return m_photoFrameWidth; }
@@ -274,9 +275,6 @@ public:
     void setVignetteStrength(double s);
     void setGrainStrength(double s);
     void setCaStrength(double s);
-    void setTexturePath(const QString &path);
-    void setTextureOpacity(double o);
-    void setTextureBlendMode(int m);
     void setPhotoFrame(bool on);
     void setPhotoFrameWidth(int w);
     void setBgPatternEnabled(bool on);
@@ -302,14 +300,6 @@ public:
     Q_INVOKABLE QString gradientPresetColor1(int index) const;
     Q_INVOKABLE QString gradientPresetColor2(int index) const;
     Q_INVOKABLE double aspectRatioForMode(int mode) const;
-
-    /// Overlay catalog (user assets in AppDataLocation/overlays).
-    Q_INVOKABLE QStringList textureCatalog();
-    Q_INVOKABLE QString textureCatalogDir() const;
-    /// Dropzone entry: copy a dropped image into the overlays dir (uniquified),
-    /// refresh the catalog, select it. Returns false + status message on
-    /// unreadable/non-image input.
-    Q_INVOKABLE bool importOverlayFile(const QString &srcPath);
 
     /// Mood palette access
     Q_INVOKABLE int moodCount() const { return 6; }
@@ -394,7 +384,6 @@ Q_SIGNALS:
     void blurPresetIdChanged();
     void fgZoomBoundsChanged();
     void bgPatternMixMotifsChanged();
-    void textureCatalogChanged();
     void paramPresetsChanged();
     void processingStarted();
     void processingFinished();
@@ -491,14 +480,13 @@ private:
     mutable QHash<int, QString> m_svgGeoThumbnailCache;
     QHash<QString, QImage> m_renderTileCache;   // Q14: rendered pattern tiles
 
-    // ── Overlay state (Phase 2: user-asset texture overlay) ──
-    QString m_texturePath;                       // empty = off
+    // ── Texture state (procedural, preset-owned — no user assets) ──
+    int     m_textureKind = 0;               // 0 none, 1 leak, 2 polaroid, 3 film border
     double  m_textureOpacity = 0.0;
     int     m_textureBlendMode = WalltzDefaults::textureBlendMode;
-    QImage  m_textureLoaded;                     // resolved on the main thread
-    QStringList m_textureCatalog;                // cached scan of the overlays dir
     bool    m_textureOverPhoto = false;
-    bool    m_photoGrade = false;                // photo look active: grade the photo
+    QRgb    m_textureColor = 0;
+    bool    m_photoGrade = false;            // photo look active: grade the photo
 
     /// Build a fully-resolved snapshot from current member state + source.
     /// Must be called on the main thread (reads members, resolves mood colors).
@@ -558,6 +546,12 @@ public:
                              double *outMinZoom = nullptr,
                              double *outMaxZoom = nullptr,
                              QHash<QString, QImage> *tileCache = nullptr);
+
+    /// Procedural overlay texture (preset-owned, no user assets): kind 1 =
+    /// light leak, 2 = polaroid frame (hugs the photo rect), 3 = film border.
+    /// Pure function — public for tests.
+    static QImage generateOverlayTexture(int kind, QRgb color, int W, int H,
+                                         int fgCx, int fgCy, int imgW, int imgH);
 
     static constexpr double s_aspectRatios[7] = {0.0, 1.0, 4.0/3.0, 16.0/9.0, 16.0/10.0, 21.0/9.0, 32.0/9.0};
 

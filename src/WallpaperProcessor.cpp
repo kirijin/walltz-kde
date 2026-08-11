@@ -367,44 +367,6 @@ void WallpaperProcessor::setCaStrength(double s)
     if (!qFuzzyCompare(m_caStrength, s)) { m_caStrength = s; Q_EMIT renderParamsChanged(); }
 }
 
-void WallpaperProcessor::setTexturePath(const QString &path)
-{
-    if (m_texturePath == path) return;
-    if (path.isEmpty()) {
-        m_texturePath.clear();
-        m_textureLoaded = QImage();
-        Q_EMIT renderParamsChanged();
-        return;
-    }
-    QImage img(path);
-    if (img.isNull()) {
-        m_statusMessage = QStringLiteral("Overlay not found: %1").arg(path);
-        Q_EMIT statusMessageChanged();
-        return;   // keep the previous selection; never silently switch to "off"
-    }
-    m_texturePath = path;
-    m_textureLoaded = img;
-    // A later successful pick clears a stale "Overlay not found" error so the
-    // status bar can't lie after the user fixes the selection.
-    if (m_statusMessage.startsWith(QStringLiteral("Overlay not found"))) {
-        m_statusMessage.clear();
-        Q_EMIT statusMessageChanged();
-    }
-    Q_EMIT renderParamsChanged();
-}
-
-void WallpaperProcessor::setTextureOpacity(double o)
-{
-    o = qBound(0.0, o, 1.0);
-    if (!qFuzzyCompare(m_textureOpacity, o)) { m_textureOpacity = o; Q_EMIT renderParamsChanged(); }
-}
-
-void WallpaperProcessor::setTextureBlendMode(int m)
-{
-    m = qBound(0, m, 28);   // valid QPainter::CompositionMode range
-    if (m_textureBlendMode != m) { m_textureBlendMode = m; Q_EMIT renderParamsChanged(); }
-}
-
 void WallpaperProcessor::setPhotoFrame(bool on)
 {
     if (m_photoFrame != on) { m_photoFrame = on; Q_EMIT renderParamsChanged(); }
@@ -761,11 +723,12 @@ RenderSnapshot WallpaperProcessor::captureSnapshot(const QImage &src, int W, int
     rs.colorGamma          = m_colorGamma;
     rs.colorWarmth         = m_colorWarmth;
     rs.colorBlackLift      = m_colorBlackLift;
-    rs.textureImage        = m_texturePath.isEmpty() ? QImage() : m_textureLoaded;
-    rs.textureOpacity      = m_textureOpacity;
-    rs.textureBlendMode    = m_textureBlendMode;
-    rs.textureOverPhoto    = m_textureOverPhoto;
-    rs.photoGrade          = m_photoGrade;
+    rs.textureKind        = m_textureKind;
+    rs.textureColor       = m_textureColor;
+    rs.textureOpacity     = m_textureOpacity;
+    rs.textureBlendMode   = m_textureBlendMode;
+    rs.textureOverPhoto   = m_textureOverPhoto;
+    rs.photoGrade         = m_photoGrade;
     rs.overlayOpacity      = m_overlayOpacity;
     rs.overlayColor        = m_overlayColor.rgb();
     rs.blurBrightness      = m_blurBrightness;
@@ -811,6 +774,62 @@ RenderSnapshot WallpaperProcessor::captureSnapshot(const QImage &src, int W, int
 // Single pipeline for both full output and preview. Thread-safe: reads only
 // the snapshot. Background fill, pattern overlay, effects, composition,
 // shadow, frame, foreground and CA all run here exactly once.
+
+// Procedural overlay textures (2026-08-11): preset-owned, no user assets —
+// licensing-safe, resolution-independent. kind 1 = light leak (soft tinted
+// blob from the top-right), 2 = polaroid frame (white border hugging the
+// photo rect, transparent center), 3 = film border (soft dark edges).
+QImage WallpaperProcessor::generateOverlayTexture(int kind, QRgb color, int W, int H,
+                                                  int fgCx, int fgCy, int imgW, int imgH)
+{
+    if (kind <= 0) return {};
+    QImage img(W, H, QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::transparent);
+    QPainter p(&img);
+    p.setRenderHint(QPainter::Antialiasing);
+    switch (kind) {
+    case 1: {   // light leak
+        const QColor c = color ? QColor(color) : QColor(0xE8, 0xA0, 0x50);
+        QRadialGradient g(W, 0, qMax(W, H) * 0.75, W, 0);   // top-right corner, reaching inward
+        g.setColorAt(0.0, QColor(c.red(), c.green(), c.blue(), 110));
+        g.setColorAt(0.4, QColor(c.red(), c.green(), c.blue(), 55));
+        g.setColorAt(1.0, QColor(c.red(), c.green(), c.blue(), 0));
+        p.setBrush(g);
+        p.setPen(Qt::NoPen);
+        p.drawRect(0, 0, W, H);
+        break;
+    }
+    case 2: {   // polaroid frame: white border hugging the photo, thick bottom
+        const int bw = qMax(10, qMin(W, H) / 24);
+        const int bh = qMax(16, bw * 3 / 2);
+        const QRectF pr(fgCx - bw, fgCy - bw, imgW + 2.0 * bw, imgH + 2.0 * bw);
+        p.setBrush(Qt::white);
+        p.setPen(Qt::NoPen);
+        p.drawRect(QRectF(pr.left(), pr.top(), pr.width(), bw));              // top
+        p.drawRect(QRectF(pr.left(), pr.bottom() - bh, pr.width(), bh));      // bottom (thick)
+        p.drawRect(QRectF(pr.left(), pr.top() + bw, bw, pr.height() - bw - bh));  // left
+        p.drawRect(QRectF(pr.right() - bw, pr.top() + bw, bw, pr.height() - bw - bh)); // right
+        break;
+    }
+    case 3: {   // film border: soft vignette + dark edge strips
+        const int bw = qMax(10, qMin(W, H) / 40);
+        QRadialGradient g(W / 2.0, H / 2.0, qMax(W, H) * 0.62);
+        g.setColorAt(0.72, QColor(0, 0, 0, 0));
+        g.setColorAt(1.0, QColor(0, 0, 0, 120));
+        p.setBrush(g);
+        p.setPen(Qt::NoPen);
+        p.drawRect(0, 0, W, H);
+        p.setBrush(QColor(0, 0, 0, 90));
+        p.drawRect(0, 0, W, bw);
+        p.drawRect(0, H - bw, W, bw);
+        break;
+    }
+    default:
+        break;
+    }
+    p.end();
+    return img;
+}
 
 // Forward decls — the float pipeline helpers are defined below renderCore.
 static void imageToFloat(const QImage &img, float *buf);
@@ -968,16 +987,19 @@ QImage WallpaperProcessor::renderCore(const RenderSnapshot &rs,
         p.restore();
     }
 
-    // ── Texture overlay (Phase 2: user asset, light-leak/vignette style) ──
-    // Verified XnRetro semantics: path + opacity + blend (Multiply default).
-    // Drawn over the full canvas so the foreground image sits on top of it.
-    if (!rs.textureImage.isNull() && rs.textureOpacity > 0.001) {
-        p.save();
-        p.setCompositionMode(static_cast<QPainter::CompositionMode>(rs.textureBlendMode));
-        p.setOpacity(qBound(0.0, rs.textureOpacity, 1.0));
-        p.drawImage(QRect(0, 0, W, H), rs.textureImage,
-                    QRectF(0, 0, rs.textureImage.width(), rs.textureImage.height()));
-        p.restore();
+    // ── Texture overlay UNDER the photo (leaks; film-border feel on bg) ──
+    // Procedural, preset-owned (textureKind), drawn under the photo unless
+    // the look asks for over-photo placement (next block).
+    if (rs.textureKind > 0 && !rs.textureOverPhoto && rs.textureOpacity > 0.001) {
+        const QImage tex = WallpaperProcessor::generateOverlayTexture(
+            rs.textureKind, rs.textureColor, W, H, fgCx, fgCy, imgW, imgH);
+        if (!tex.isNull()) {
+            p.save();
+            p.setCompositionMode(static_cast<QPainter::CompositionMode>(rs.textureBlendMode));
+            p.setOpacity(qBound(0.0, rs.textureOpacity, 1.0));
+            p.drawImage(0, 0, tex);
+            p.restore();
+        }
     }
 
     // ── Shadow (expands to include photo frame) ──
@@ -1031,18 +1053,21 @@ QImage WallpaperProcessor::renderCore(const RenderSnapshot &rs,
     p.drawImage(-src.width() / 2.0, -src.height() / 2.0, photo);
     p.restore();
 
-    // ── Texture overlay OVER the photo (retro looks: film borders/frames) ──
+    // ── Texture overlay OVER the photo (retro looks: frames/borders) ──
     // The under-photo placement (before the shadow block) serves leaks; looks
     // with textureOverPhoto draw here so the texture covers the subject —
     // the XnRetro way, where the frame/leak sits on top of the image.
     // Painter still active and canvas-transformed here (before p.end()).
-    if (rs.textureOverPhoto && !rs.textureImage.isNull() && rs.textureOpacity > 0.001) {
-        p.save();
-        p.setCompositionMode(static_cast<QPainter::CompositionMode>(rs.textureBlendMode));
-        p.setOpacity(qBound(0.0, rs.textureOpacity, 1.0));
-        p.drawImage(QRect(0, 0, W, H), rs.textureImage,
-                    QRectF(0, 0, rs.textureImage.width(), rs.textureImage.height()));
-        p.restore();
+    if (rs.textureKind > 0 && rs.textureOverPhoto && rs.textureOpacity > 0.001) {
+        const QImage tex = WallpaperProcessor::generateOverlayTexture(
+            rs.textureKind, rs.textureColor, W, H, fgCx, fgCy, imgW, imgH);
+        if (!tex.isNull()) {
+            p.save();
+            p.setCompositionMode(static_cast<QPainter::CompositionMode>(rs.textureBlendMode));
+            p.setOpacity(qBound(0.0, rs.textureOpacity, 1.0));
+            p.drawImage(0, 0, tex);
+            p.restore();
+        }
     }
     p.end();
 
@@ -2350,29 +2375,14 @@ void WallpaperProcessor::setBlurPresetIndex(int index)
     m_photoFrame      = cfg.frameEnabled;
     m_photoFrameWidth = cfg.frameEnabled ? cfg.frameWidthPct : 0;
     // Holistic look fields: photoGrade rows (Kodachrome/Polaroid/Vintage/Tri-X/
-    // Cool Film) own the texture state — resolve the optional asset against
-    // the overlays dir, clear when absent; ordinary rows never touch the
-    // user's manually picked texture.
-    m_textureOverPhoto = cfg.textureOverPhoto;
-    m_textureOpacity   = cfg.textureOpacity;
-    m_textureBlendMode = qBound(0, cfg.textureBlendMode, 28);
+    // Cool Film) own the texture state — procedural, no user assets. Ordinary
+    // rows keep the user's current texture untouched.
+    m_textureKind      = cfg.photoGrade ? cfg.textureKind : 0;
+    m_textureColor     = cfg.photoGrade ? cfg.textureColor : 0;
+    m_textureOverPhoto = cfg.photoGrade ? cfg.textureOverPhoto : false;
+    m_textureOpacity   = cfg.photoGrade ? cfg.textureOpacity : 0.0;
+    m_textureBlendMode = cfg.photoGrade ? qBound(0, cfg.textureBlendMode, 28) : WalltzDefaults::textureBlendMode;
     m_photoGrade       = cfg.photoGrade;
-    if (cfg.photoGrade) {
-        if (cfg.textureAsset && *cfg.textureAsset) {
-            const QString path = textureCatalogDir()
-                                 + QLatin1Char('/') + QString::fromUtf8(cfg.textureAsset);
-            if (QFileInfo::exists(path)) {
-                m_texturePath = path;
-                m_textureLoaded = QImage(path);
-            } else {
-                m_texturePath.clear();
-                m_textureLoaded = QImage();
-            }
-        } else {
-            m_texturePath.clear();
-            m_textureLoaded = QImage();
-        }
-    }
     Q_EMIT blurPresetIdChanged();
     Q_EMIT renderParamsChanged();
 }
@@ -2386,8 +2396,8 @@ void WallpaperProcessor::resetBlurToDefault()
     m_colorGamma     = WalltzDefaults::colorGamma;
     m_colorWarmth    = WalltzDefaults::colorWarmth;
     m_colorBlackLift = WalltzDefaults::colorBlackLift;
-    m_texturePath.clear();
-    m_textureLoaded = QImage();
+    m_textureKind      = 0;
+    m_textureColor     = 0;
     m_textureOpacity   = 0.0;
     m_textureBlendMode = WalltzDefaults::textureBlendMode;
     m_textureOverPhoto = false;
@@ -2560,75 +2570,6 @@ QString WallpaperProcessor::motifPatternThumbnail(int index, int thumbSize)
 
 // ── Overlay catalog (Phase 2: user assets, AppDataLocation/overlays) ────
 
-QString WallpaperProcessor::textureCatalogDir() const
-{
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-           + QStringLiteral("/overlays");
-}
-
-QStringList WallpaperProcessor::textureCatalog()
-{
-    // Re-scan every call (cheap dir listing): lets the user drop files into
-    // the folder while the app runs. Emit only on actual change so QML's
-    // binding refresh doesn't spam. Suffix filter is case-insensitive
-    // (Linux name filters are case-sensitive: "FOO.PNG" would never appear).
-    const QString dir = textureCatalogDir();
-    QDir().mkpath(dir);   // make the drop target visible in the QML hint
-    QStringList fresh;
-    const QFileInfoList infos = QDir(dir).entryInfoList(QDir::Files, QDir::Name);
-    for (const QFileInfo &fi : infos) {
-        const QString suf = fi.suffix().toLower();
-        if (suf == QStringLiteral("png") || suf == QStringLiteral("jpg")
-            || suf == QStringLiteral("jpeg") || suf == QStringLiteral("webp"))
-            fresh << fi.absoluteFilePath();
-    }
-    if (fresh != m_textureCatalog) {
-        m_textureCatalog = fresh;
-        Q_EMIT textureCatalogChanged();
-    }
-    return m_textureCatalog;
-}
-
-bool WallpaperProcessor::importOverlayFile(const QString &srcPath)
-{
-    const QFileInfo src(srcPath);
-    if (!src.isFile() || !src.isReadable()) {
-        m_statusMessage = QStringLiteral("Cannot read overlay: %1").arg(srcPath);
-        Q_EMIT statusMessageChanged();
-        return false;
-    }
-    const QString suf = src.suffix().toLower();
-    if (suf != QStringLiteral("png") && suf != QStringLiteral("jpg")
-        && suf != QStringLiteral("jpeg") && suf != QStringLiteral("webp")) {
-        m_statusMessage = QStringLiteral("Overlay must be PNG/JPG/WebP: %1").arg(srcPath);
-        Q_EMIT statusMessageChanged();
-        return false;
-    }
-    const QString dir = textureCatalogDir();
-    if (!QDir().mkpath(dir)) return false;
-    QString dest = dir + QLatin1Char('/') + src.fileName();
-    if (QFile::exists(dest)) {
-        // Uniquify: name-1.png, name-2.png ... (drop the same file twice)
-        const QString base = src.completeBaseName();
-        const QString ext = src.suffix();
-        int n = 1;
-        do {
-            dest = dir + QLatin1Char('/') + base + QStringLiteral("-%1.").arg(n) + ext;
-            ++n;
-        } while (QFile::exists(dest));
-    }
-    if (!QFile::copy(srcPath, dest)) {
-        m_statusMessage = QStringLiteral("Could not copy overlay into %1").arg(dir);
-        Q_EMIT statusMessageChanged();
-        return false;
-    }
-    textureCatalog();   // re-scan + change signal (QML picker refresh)
-    m_texturePath = dest;
-    m_textureLoaded = QImage(dest);
-    Q_EMIT renderParamsChanged();
-    return true;
-}
-
 // ── F2: named-parameter presets (QSettings-backed) ─────────────────────
 // serializeParams/deserializeParams are the single source for both the
 // persisted presets and the in-memory undo snapshot (F6) — one map, two
@@ -2648,7 +2589,8 @@ QVariantMap WallpaperProcessor::serializeParams() const
     m.insert(QStringLiteral("colorGamma"), m_colorGamma);
     m.insert(QStringLiteral("colorWarmth"), m_colorWarmth);
     m.insert(QStringLiteral("colorBlackLift"), m_colorBlackLift);
-    m.insert(QStringLiteral("texturePath"), m_texturePath);
+    m.insert(QStringLiteral("textureKind"), m_textureKind);
+    m.insert(QStringLiteral("textureColor"), int(m_textureColor));
     m.insert(QStringLiteral("textureOpacity"), m_textureOpacity);
     m.insert(QStringLiteral("textureBlendMode"), m_textureBlendMode);
     m.insert(QStringLiteral("textureOverPhoto"), m_textureOverPhoto);
@@ -2697,10 +2639,8 @@ void WallpaperProcessor::deserializeParams(const QVariantMap &m)
     m_colorGamma       = m.value(QStringLiteral("colorGamma"), m_colorGamma).toDouble();
     m_colorWarmth      = m.value(QStringLiteral("colorWarmth"), m_colorWarmth).toDouble();
     m_colorBlackLift   = m.value(QStringLiteral("colorBlackLift"), m_colorBlackLift).toDouble();
-    m_texturePath      = m.value(QStringLiteral("texturePath"), m_texturePath).toString();
-    m_textureLoaded    = m_texturePath.isEmpty() ? QImage() : QImage(m_texturePath);
-    if (!m_texturePath.isEmpty() && m_textureLoaded.isNull())
-        m_texturePath.clear();   // asset vanished since the preset was saved
+    m_textureKind      = m.value(QStringLiteral("textureKind"), m_textureKind).toInt();
+    m_textureColor     = QRgb(m.value(QStringLiteral("textureColor"), int(m_textureColor)).toUInt());
     m_textureOpacity   = m.value(QStringLiteral("textureOpacity"), m_textureOpacity).toDouble();
     m_textureBlendMode = qBound(0, m.value(QStringLiteral("textureBlendMode"), m_textureBlendMode).toInt(), 28);
     m_textureOverPhoto = m.value(QStringLiteral("textureOverPhoto"), m_textureOverPhoto).toBool();
