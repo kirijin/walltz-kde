@@ -1396,7 +1396,9 @@ Kirigami.ApplicationWindow {
                             anchors.fill: parent
                             anchors.margins: 3
                             fillMode: Image.PreserveAspectFit
-                            source: modelData
+                            // resolvedUrl: raw paths with # or % would misparse
+                            // as URL fragments/escapes otherwise.
+                            source: Qt.resolvedUrl(modelData)
                             sourceSize: Qt.size(width * 2, height * 2)
                         }
                         MouseArea {

@@ -72,9 +72,12 @@ int main(int argc, char **argv)
     // Optional real photos appended via argv[2..]
     for (int i = 2; i < argc; ++i) {
         QImage photo(QString::fromUtf8(argv[i]));
-        if (!photo.isNull())
-            sources.append({ QFileInfo(QString::fromUtf8(argv[i])).completeBaseName(),
-                             photo.scaled(320, 180, Qt::KeepAspectRatioByExpanding) });
+        if (!photo.isNull()) {
+            QImage scaled = photo.scaled(320, 180, Qt::KeepAspectRatioByExpanding);
+            // Crop to the exact cell so every preview shares one aspect.
+            scaled = scaled.copy((scaled.width() - 320) / 2, (scaled.height() - 180) / 2, 320, 180);
+            sources.append({ QFileInfo(QString::fromUtf8(argv[i])).completeBaseName(), scaled });
+        }
     }
 
     for (int p = 0; p < blurPresetCount(); ++p) {

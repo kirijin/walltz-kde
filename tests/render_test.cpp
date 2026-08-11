@@ -254,6 +254,17 @@ int main(int argc, char **argv)
         CHECK(c.red() > 250 && c.green() > 250 && c.blue() > 250,
               "overlay: opacity 0 leaves background untouched");
     }
+    {
+        // Z-ORDER LOCK (reviewer Demonstration): with a texture at 100% and a
+        // photo on top, the canvas CENTER must show the photo (gray), not the
+        // texture (red) — the overlay is drawn UNDER the foreground. A future
+        // move of the draw block after the foreground flips this and every
+        // margin-pixel test above still passes; this one fails.
+        QImage out = overlayRender(1.0, 13);
+        QColor c = out.pixelColor(64, 64);   // canvas center == photo area
+        CHECK(c.red() > 60 && c.red() < 160 && c.green() > 60 && c.green() < 160,
+              "overlay: texture stays UNDER the foreground photo (z-order locked)");
+    }
 
     // ── Retro preset family (Phase 3): table sanity ──
     {

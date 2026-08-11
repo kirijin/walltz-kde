@@ -2492,12 +2492,18 @@ QStringList WallpaperProcessor::textureCatalog()
 {
     // Re-scan every call (cheap dir listing): lets the user drop files into
     // the folder while the app runs. Emit only on actual change so QML's
-    // binding refresh doesn't spam.
+    // binding refresh doesn't spam. Suffix filter is case-insensitive
+    // (Linux name filters are case-sensitive: "FOO.PNG" would never appear).
     const QString dir = textureCatalogDir();
     QDir().mkpath(dir);   // make the drop target visible in the QML hint
-    QStringList fresh = QDir(dir).entryList(QStringList() << QStringLiteral("*.png") << QStringLiteral("*.jpg") << QStringLiteral("*.jpeg") << QStringLiteral("*.webp"),
-                                            QDir::Files, QDir::Name);
-    for (QString &f : fresh) f = QDir(dir).filePath(f);
+    QStringList fresh;
+    const QFileInfoList infos = QDir(dir).entryInfoList(QDir::Files, QDir::Name);
+    for (const QFileInfo &fi : infos) {
+        const QString suf = fi.suffix().toLower();
+        if (suf == QStringLiteral("png") || suf == QStringLiteral("jpg")
+            || suf == QStringLiteral("jpeg") || suf == QStringLiteral("webp"))
+            fresh << fi.absoluteFilePath();
+    }
     if (fresh != m_textureCatalog) {
         m_textureCatalog = fresh;
         Q_EMIT textureCatalogChanged();
@@ -2576,7 +2582,7 @@ void WallpaperProcessor::deserializeParams(const QVariantMap &m)
     if (!m_texturePath.isEmpty() && m_textureLoaded.isNull())
         m_texturePath.clear();   // asset vanished since the preset was saved
     m_textureOpacity   = m.value(QStringLiteral("textureOpacity"), m_textureOpacity).toDouble();
-    m_textureBlendMode = m.value(QStringLiteral("textureBlendMode"), m_textureBlendMode).toInt();
+    m_textureBlendMode = qBound(0, m.value(QStringLiteral("textureBlendMode"), m_textureBlendMode).toInt(), 28);
     m_overlayOpacity   = m.value(QStringLiteral("overlayOpacity"), m_overlayOpacity).toDouble();
     m_overlayColor     = QColor(m.value(QStringLiteral("overlayColor"), m_overlayColor.name()).toString());
     m_blurBrightness   = m.value(QStringLiteral("blurBrightness"), m_blurBrightness).toDouble();
