@@ -68,6 +68,33 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME walltz_baseline_test COMMAND walltz_baseline_test)
 
+    # Preset preview renderer (manual tool, not a ctest): renders every preset
+    # to PNGs for the human tune loop (Phase 3).
+    add_executable(walltz_preset_preview preset_preview.cpp)
+    target_sources(walltz_preset_preview PRIVATE
+        ../src/WallpaperProcessor.cpp
+        ../src/blur_presets.cpp
+        ../src/WallpaperAnalyzer.cpp
+    )
+    target_include_directories(walltz_preset_preview PRIVATE ../src)
+    target_link_libraries(walltz_preset_preview PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Svg
+        Qt6::Concurrent
+        Qt6::DBus
+        KF6::I18n
+        KF6::CoreAddons
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(walltz_preset_preview PRIVATE
+            -march=native
+            -fno-rtti
+            -ffunction-sections
+            -fdata-sections
+        )
+    endif()
+
     # S1/S2/S3/P1/P2 blur-core regression (range-clamp equivalence + box gate).
     add_executable(walltz_blur_regression blur_regression.cpp)
     target_sources(walltz_blur_regression PRIVATE

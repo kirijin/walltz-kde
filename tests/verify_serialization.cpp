@@ -156,6 +156,18 @@ int main(int argc, char **argv)
         QFile::remove(tmpOverlay);
     }
 
+    // ── Phase 3: retro preset application + locked-default invariant ──
+    p.setBlurPresetIndex(static_cast<int>(BlurPresetId::RetroVintage));
+    CHECK(qFuzzyCompare(p.colorGamma(), 1.08), "retro: vintage applies gamma 1.08");
+    CHECK(qFuzzyCompare(p.colorWarmth(), 0.28), "retro: vintage applies warmth 0.28");
+    CHECK(qFuzzyCompare(p.colorBlackLift(), 0.0), "retro: vintage applies blackLift 0.0");
+    CHECK(qFuzzyCompare(p.saturationFactor(), 1.6), "retro: vintage applies satBoost 1.6");
+    // Default is locked: re-selecting it must restore fully neutral color grade.
+    p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Default));
+    CHECK(qFuzzyCompare(p.colorGamma(), 1.0), "retro->default: gamma neutral");
+    CHECK(qFuzzyCompare(p.colorWarmth(), 0.0), "retro->default: warmth neutral");
+    CHECK(qFuzzyCompare(p.colorBlackLift(), 0.0), "retro->default: blackLift neutral");
+
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);
     return failures == 0 ? 0 : 1;
 }

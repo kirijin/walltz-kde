@@ -24,6 +24,16 @@ static const BlurConfig s_presets[] = {
     // backdrop is DARK, not light. Photo wears the built-in matte frame at 1%
     // width; corner rounding stays the frame default (no new frame style).
     { "reddit",  "Reddit",  24,    1.0,  1.00,   0.70,  0x0B0E0F,  0.0,  0.0,  true, 1,  1.0,  0.0,  0.0 },
+    // Retro family (Phase 3, 2026-08-11): re-derived from XnRetro's curve
+    // SHAPES (warm/lifted/faded/vintage/cool), calm-tamed — NOT transcribed
+    // bytes. Values are starters; tuned by rendered output (render-and-tune
+    // loop, memlog notes). All color-only: overlays are user-picked.
+    //    id           display        σ   sat   bright  ovlOp ovlColor vig grain frEn frW  γ     warm  lift
+    { "retro_warm",   "Retro Warm",   90,  1.4,  1.00,   0.0,  0x000000,  0.0,  0.0,  false, 0,  0.98,  0.22,  0.10 },
+    { "retro_faded",  "Retro Faded",  90,  1.2,  1.00,   0.0,  0x000000,  0.0,  0.0,  false, 0,  0.95,  0.08,  0.16 },
+    { "retro_vintage","Retro Vintage",90,  1.6,  1.00,   0.0,  0x000000,  0.0,  0.0,  false, 0,  1.08,  0.28,  0.00 },
+    { "retro_cool",   "Retro Cool",   90,  1.3,  1.00,   0.0,  0x000000,  0.0,  0.0,  false, 0,  1.03, -0.20,  0.10 },
+    { "retro_paper",  "Retro Paper",  90,  1.3,  1.00,   0.0,  0x000000,  0.0,  0.0,  false, 0,  0.98,  0.10,  0.05 },
 };
 static constexpr int PRESET_COUNT = sizeof(s_presets) / sizeof(s_presets[0]);
 

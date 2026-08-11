@@ -255,6 +255,24 @@ int main(int argc, char **argv)
               "overlay: opacity 0 leaves background untouched");
     }
 
+    // ── Retro preset family (Phase 3): table sanity ──
+    {
+        int retroCount = 0;
+        for (int i = 0; i < blurPresetCount(); ++i) {
+            const BlurConfig &c = blurPresetConfig(i);
+            if (qstrcmp(c.id, "retro_warm") == 0 || qstrcmp(c.id, "retro_faded") == 0 ||
+                qstrcmp(c.id, "retro_vintage") == 0 || qstrcmp(c.id, "retro_cool") == 0 ||
+                qstrcmp(c.id, "retro_paper") == 0) {
+                retroCount++;
+                CHECK(c.gamma >= 0.5 && c.gamma <= 2.5, "retro: gamma in range");
+                CHECK(c.warmth >= -1.0 && c.warmth <= 1.0, "retro: warmth in range");
+                CHECK(c.blackLift >= 0.0 && c.blackLift <= 1.0, "retro: blackLift in range");
+                CHECK(c.frameEnabled == false, "retro: no frame leakage");
+            }
+        }
+        CHECK(retroCount == 5, "retro: exactly 5 family presets");
+    }
+
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);
     return failures == 0 ? 0 : 1;
 }
