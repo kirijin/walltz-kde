@@ -215,6 +215,46 @@ int main(int argc, char **argv)
         CHECK(qAbs(c.red() - c.blue()) <= 2, "color-grade: neutral params leave gray neutral");
     }
 
+    // ── Texture overlay (Phase 2): asset + opacity + Multiply blend ──
+    QImage redOverlay(32, 32, QImage::Format_ARGB32_Premultiplied);
+    redOverlay.fill(QColor(255, 0, 0));
+
+    auto overlayRender = [&](double opacity, int blend) {
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = false;
+        rs.bgGradientStyle = 0;
+        rs.autoColor = false;
+        rs.bgColor = 0xffffffff;   // white background
+        rs.textureImage = redOverlay;
+        rs.textureOpacity = opacity;
+        rs.textureBlendMode = blend;
+        rs.sourceImage = flat;
+        return WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+    };
+
+    {
+        // Multiply at 100% on white -> pure red
+        QImage out = overlayRender(1.0, 13);   // 13 == CompositionMode_Multiply
+        QColor c = out.pixelColor(4, 4);
+        CHECK(c.red() > 250 && c.green() < 10 && c.blue() < 10,
+              "overlay: Multiply 100% red-on-white -> red");
+    }
+    {
+        // Multiply at 50% -> red blended halfway toward white: (255, 127, 127)
+        QImage out = overlayRender(0.5, 13);
+        QColor c = out.pixelColor(4, 4);
+        CHECK(c.red() > 250 && qAbs(c.green() - 127) <= 3 && qAbs(c.blue() - 127) <= 3,
+              "overlay: Multiply 50% -> midpoint toward white");
+    }
+    {
+        // opacity 0 == no overlay at all (background stays white)
+        QImage out = overlayRender(0.0, 13);
+        QColor c = out.pixelColor(4, 4);
+        CHECK(c.red() > 250 && c.green() > 250 && c.blue() > 250,
+              "overlay: opacity 0 leaves background untouched");
+    }
+
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);
     return failures == 0 ? 0 : 1;
 }

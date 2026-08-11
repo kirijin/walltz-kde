@@ -34,6 +34,7 @@ namespace WalltzDefaults {
     inline constexpr double colorGamma       = 1.0;   // per-channel curve (float stage)
     inline constexpr double colorWarmth      = 0.0;   // -1..1, R/B balance (positive = warm)
     inline constexpr double colorBlackLift   = 0.0;   // shadow floor 0..1 (faded-film look)
+    inline constexpr int    textureBlendMode = 13;    // QPainter::CompositionMode_Multiply
     inline constexpr double overlayOpacity   = 0.0;
     inline constexpr double bgZoom           = 1.0;
     inline constexpr double bgBlurAngle      = 0.0;
@@ -107,6 +108,9 @@ struct RenderSnapshot {
     double colorGamma = WalltzDefaults::colorGamma;
     double colorWarmth = WalltzDefaults::colorWarmth;
     double colorBlackLift = WalltzDefaults::colorBlackLift;
+    QImage textureImage;                  // resolved main-thread; null = no overlay
+    double textureOpacity = 0.0;
+    int    textureBlendMode = WalltzDefaults::textureBlendMode;
     bool   photoFrame = false;
     int    photoFrameWidth = WalltzDefaults::photoFrameWidth;
     double fgZoom = WalltzDefaults::fgZoom;
@@ -154,6 +158,8 @@ class WallpaperProcessor : public QObject
     Q_PROPERTY(double vignetteStrength READ vignetteStrength WRITE setVignetteStrength NOTIFY renderParamsChanged)
     Q_PROPERTY(double grainStrength READ grainStrength WRITE setGrainStrength NOTIFY renderParamsChanged)
     Q_PROPERTY(double caStrength READ caStrength WRITE setCaStrength NOTIFY renderParamsChanged)
+    Q_PROPERTY(QString texturePath READ texturePath WRITE setTexturePath NOTIFY renderParamsChanged)
+    Q_PROPERTY(double textureOpacity READ textureOpacity WRITE setTextureOpacity NOTIFY renderParamsChanged)
     Q_PROPERTY(bool photoFrame READ photoFrame WRITE setPhotoFrame NOTIFY renderParamsChanged)
     Q_PROPERTY(int photoFrameWidth READ photoFrameWidth WRITE setPhotoFrameWidth NOTIFY renderParamsChanged)
     Q_PROPERTY(double fgZoom READ fgZoom WRITE setFgZoom NOTIFY renderParamsChanged)
@@ -217,6 +223,9 @@ public:
     double vignetteStrength() const { return m_vignetteStrength; }
     double grainStrength() const { return m_grainStrength; }
     double caStrength() const { return m_caStrength; }
+    QString texturePath() const { return m_texturePath; }
+    double textureOpacity() const { return m_textureOpacity; }
+    int textureBlendMode() const { return m_textureBlendMode; }
     bool photoFrame() const { return m_photoFrame; }
     int photoFrameWidth() const { return m_photoFrameWidth; }
     double fgZoom() const { return m_fgZoom; }
@@ -262,6 +271,9 @@ public:
     void setVignetteStrength(double s);
     void setGrainStrength(double s);
     void setCaStrength(double s);
+    void setTexturePath(const QString &path);
+    void setTextureOpacity(double o);
+    void setTextureBlendMode(int m);
     void setPhotoFrame(bool on);
     void setPhotoFrameWidth(int w);
     void setBgPatternEnabled(bool on);
@@ -287,6 +299,11 @@ public:
     Q_INVOKABLE QString gradientPresetColor1(int index) const;
     Q_INVOKABLE QString gradientPresetColor2(int index) const;
     Q_INVOKABLE double aspectRatioForMode(int mode) const;
+
+    /// Overlay catalog (user assets in AppDataLocation/overlays) + thumbnails.
+    Q_INVOKABLE QStringList textureCatalog();
+    Q_INVOKABLE QString textureThumbnail(int index, int thumbSize = 96);
+    Q_INVOKABLE QString textureCatalogDir() const;
 
     /// Mood palette access
     Q_INVOKABLE int moodCount() const { return 6; }
@@ -371,6 +388,7 @@ Q_SIGNALS:
     void blurPresetIdChanged();
     void fgZoomBoundsChanged();
     void bgPatternMixMotifsChanged();
+    void textureCatalogChanged();
     void paramPresetsChanged();
     void processingStarted();
     void processingFinished();
@@ -466,6 +484,14 @@ private:
     mutable QHash<int, QString> m_motifThumbnailCache;
     mutable QHash<int, QString> m_svgGeoThumbnailCache;
     QHash<QString, QImage> m_renderTileCache;   // Q14: rendered pattern tiles
+
+    // ── Overlay state (Phase 2: user-asset texture overlay) ──
+    QString m_texturePath;                       // empty = off
+    double  m_textureOpacity = 0.0;
+    int     m_textureBlendMode = WalltzDefaults::textureBlendMode;
+    QImage  m_textureLoaded;                     // resolved on the main thread
+    QStringList m_textureCatalog;                // cached scan of the overlays dir
+    mutable QHash<int, QString> m_textureThumbCache;
 
     /// Build a fully-resolved snapshot from current member state + source.
     /// Must be called on the main thread (reads members, resolves mood colors).

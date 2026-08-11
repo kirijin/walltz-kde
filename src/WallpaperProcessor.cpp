@@ -367,6 +367,38 @@ void WallpaperProcessor::setCaStrength(double s)
     if (!qFuzzyCompare(m_caStrength, s)) { m_caStrength = s; Q_EMIT renderParamsChanged(); }
 }
 
+void WallpaperProcessor::setTexturePath(const QString &path)
+{
+    if (m_texturePath == path) return;
+    if (path.isEmpty()) {
+        m_texturePath.clear();
+        m_textureLoaded = QImage();
+        Q_EMIT renderParamsChanged();
+        return;
+    }
+    QImage img(path);
+    if (img.isNull()) {
+        m_statusMessage = QStringLiteral("Overlay not found: %1").arg(path);
+        Q_EMIT statusMessageChanged();
+        return;   // keep the previous selection; never silently switch to "off"
+    }
+    m_texturePath = path;
+    m_textureLoaded = img;
+    Q_EMIT renderParamsChanged();
+}
+
+void WallpaperProcessor::setTextureOpacity(double o)
+{
+    o = qBound(0.0, o, 1.0);
+    if (!qFuzzyCompare(m_textureOpacity, o)) { m_textureOpacity = o; Q_EMIT renderParamsChanged(); }
+}
+
+void WallpaperProcessor::setTextureBlendMode(int m)
+{
+    m = qBound(0, m, 28);   // valid QPainter::CompositionMode range
+    if (m_textureBlendMode != m) { m_textureBlendMode = m; Q_EMIT renderParamsChanged(); }
+}
+
 void WallpaperProcessor::setPhotoFrame(bool on)
 {
     if (m_photoFrame != on) { m_photoFrame = on; Q_EMIT renderParamsChanged(); }
@@ -723,6 +755,9 @@ RenderSnapshot WallpaperProcessor::captureSnapshot(const QImage &src, int W, int
     rs.colorGamma          = m_colorGamma;
     rs.colorWarmth         = m_colorWarmth;
     rs.colorBlackLift      = m_colorBlackLift;
+    rs.textureImage        = m_texturePath.isEmpty() ? QImage() : m_textureLoaded;
+    rs.textureOpacity      = m_textureOpacity;
+    rs.textureBlendMode    = m_textureBlendMode;
     rs.overlayOpacity      = m_overlayOpacity;
     rs.overlayColor        = m_overlayColor.rgb();
     rs.blurBrightness      = m_blurBrightness;
@@ -915,6 +950,18 @@ QImage WallpaperProcessor::renderCore(const RenderSnapshot &rs,
         p.save();
         p.setCompositionMode(QPainter::CompositionMode_SoftLight);
         p.drawImage(0, 0, grain);
+        p.restore();
+    }
+
+    // ── Texture overlay (Phase 2: user asset, light-leak/vignette style) ──
+    // Verified XnRetro semantics: path + opacity + blend (Multiply default).
+    // Drawn over the full canvas so the foreground image sits on top of it.
+    if (!rs.textureImage.isNull() && rs.textureOpacity > 0.001) {
+        p.save();
+        p.setCompositionMode(static_cast<QPainter::CompositionMode>(rs.textureBlendMode));
+        p.setOpacity(qBound(0.0, rs.textureOpacity, 1.0));
+        p.drawImage(QRect(0, 0, W, H), rs.textureImage,
+                    QRectF(0, 0, rs.textureImage.width(), rs.textureImage.height()));
         p.restore();
     }
 
@@ -2257,6 +2304,10 @@ void WallpaperProcessor::resetBlurToDefault()
     m_colorGamma     = WalltzDefaults::colorGamma;
     m_colorWarmth    = WalltzDefaults::colorWarmth;
     m_colorBlackLift = WalltzDefaults::colorBlackLift;
+    m_texturePath.clear();
+    m_textureLoaded = QImage();
+    m_textureOpacity   = 0.0;
+    m_textureBlendMode = WalltzDefaults::textureBlendMode;
     m_overlayOpacity   = WalltzDefaults::overlayOpacity;
     m_overlayColor     = Qt::black;
     m_blurBrightness   = WalltzDefaults::blurBrightness;
@@ -2423,6 +2474,41 @@ QString WallpaperProcessor::motifPatternThumbnail(int index, int thumbSize)
         [this](int i, int s) { return generateMotifTile(i, s, Qt::transparent, QColor(80,80,80), 1.0); });
 }
 
+// ── Overlay catalog (Phase 2: user assets, AppDataLocation/overlays) ────
+
+QString WallpaperProcessor::textureCatalogDir() const
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+           + QStringLiteral("/overlays");
+}
+
+QStringList WallpaperProcessor::textureCatalog()
+{
+    // Re-scan every call (cheap dir listing): lets the user drop files into
+    // the folder while the app runs. Emit only on actual change so QML's
+    // binding refresh doesn't spam.
+    const QString dir = textureCatalogDir();
+    QDir().mkpath(dir);   // make the drop target visible in the QML hint
+    QStringList fresh = QDir(dir).entryList(QStringList() << QStringLiteral("*.png") << QStringLiteral("*.jpg") << QStringLiteral("*.jpeg") << QStringLiteral("*.webp"),
+                                            QDir::Files, QDir::Name);
+    for (QString &f : fresh) f = QDir(dir).filePath(f);
+    if (fresh != m_textureCatalog) {
+        m_textureCatalog = fresh;
+        Q_EMIT textureCatalogChanged();
+    }
+    return m_textureCatalog;
+}
+
+QString WallpaperProcessor::textureThumbnail(int index, int thumbSize)
+{
+    Q_UNUSED(thumbSize);
+    const QStringList cat = textureCatalog();
+    if (index < 0 || index >= cat.size()) return {};
+    // The asset IS the thumbnail: return its file URL; QML's Image sourceSize
+    // downscales at load, so no scaled copies are needed.
+    return QUrl::fromLocalFile(cat.at(index)).toString();
+}
+
 // ── F2: named-parameter presets (QSettings-backed) ─────────────────────
 // serializeParams/deserializeParams are the single source for both the
 // persisted presets and the in-memory undo snapshot (F6) — one map, two
@@ -2442,7 +2528,10 @@ QVariantMap WallpaperProcessor::serializeParams() const
     m.insert(QStringLiteral("colorGamma"), m_colorGamma);
     m.insert(QStringLiteral("colorWarmth"), m_colorWarmth);
     m.insert(QStringLiteral("colorBlackLift"), m_colorBlackLift);
-    m.insert(QStringLiteral("overlayOpacity"), m_overlayOpacity);
+    m.insert(QStringLiteral("texturePath"), m_texturePath);
+    m.insert(QStringLiteral("textureOpacity"), m_textureOpacity);
+    m.insert(QStringLiteral("textureBlendMode"), m_textureBlendMode);
+    m.insert(QStringLiteral("overlayOpacity"), m_overlayOpacity);   // tint overlay (pre-existing)
     m.insert(QStringLiteral("overlayColor"), m_overlayColor.name());
     m.insert(QStringLiteral("blurBrightness"), m_blurBrightness);
     m.insert(QStringLiteral("bgZoom"), m_bgZoom);
@@ -2486,6 +2575,12 @@ void WallpaperProcessor::deserializeParams(const QVariantMap &m)
     m_colorGamma       = m.value(QStringLiteral("colorGamma"), m_colorGamma).toDouble();
     m_colorWarmth      = m.value(QStringLiteral("colorWarmth"), m_colorWarmth).toDouble();
     m_colorBlackLift   = m.value(QStringLiteral("colorBlackLift"), m_colorBlackLift).toDouble();
+    m_texturePath      = m.value(QStringLiteral("texturePath"), m_texturePath).toString();
+    m_textureLoaded    = m_texturePath.isEmpty() ? QImage() : QImage(m_texturePath);
+    if (!m_texturePath.isEmpty() && m_textureLoaded.isNull())
+        m_texturePath.clear();   // asset vanished since the preset was saved
+    m_textureOpacity   = m.value(QStringLiteral("textureOpacity"), m_textureOpacity).toDouble();
+    m_textureBlendMode = m.value(QStringLiteral("textureBlendMode"), m_textureBlendMode).toInt();
     m_overlayOpacity   = m.value(QStringLiteral("overlayOpacity"), m_overlayOpacity).toDouble();
     m_overlayColor     = QColor(m.value(QStringLiteral("overlayColor"), m_overlayColor.name()).toString());
     m_blurBrightness   = m.value(QStringLiteral("blurBrightness"), m_blurBrightness).toDouble();

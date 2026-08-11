@@ -428,6 +428,8 @@ Kirigami.ApplicationWindow {
                         processor.pipZoom = processor.defaultPipZoom()
                         processor.photoFrameWidth = processor.defaultPhotoFrameWidth()
                         processor.photoFrame = false
+                        processor.setTexturePath("")
+                        processor.textureOpacity = 0
                         previewDebounce.restart()
                     }
                 }
@@ -1325,6 +1327,111 @@ Kirigami.ApplicationWindow {
                             } else {
                                 processor.photoFrame = false
                             }
+                            previewDebounce.restart()
+                        }
+                    }
+                }
+
+                // ── Overlay (Phase 2): user-asset texture, Multiply blend ──
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/vignette.svg" }
+                        Controls.ToolTip.text: i18n("Clear overlay")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.setTexturePath("")
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Label {
+                        text: i18n("Overlay")
+                        font.bold: true
+                        color: Kirigami.Theme.textColor
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+
+                property var overlayItems: processor.textureCatalog()
+                Connections {
+                    target: processor
+                    function onTextureCatalogChanged() { overlayItems = processor.textureCatalog() }
+                }
+
+                ListView {
+                    id: overlayPicker
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 4
+                    orientation: Qt.Horizontal
+                    spacing: Kirigami.Units.smallSpacing
+                    clip: true
+                    model: overlayItems
+                    visible: overlayItems.length > 0
+                    delegate: Item {
+                        width: Kirigami.Units.gridUnit * 4
+                        height: overlayPicker.height
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 3
+                            color: processor.texturePath === modelData
+                                   ? Kirigami.Theme.highlightColor : "transparent"
+                            border.color: processor.texturePath === modelData
+                                          ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                            border.width: 1
+                        }
+                        Image {
+                            anchors.fill: parent
+                            anchors.margins: 3
+                            fillMode: Image.PreserveAspectFit
+                            source: modelData
+                            sourceSize: Qt.size(width * 2, height * 2)
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                processor.setTexturePath(modelData)
+                                previewDebounce.restart()
+                            }
+                        }
+                    }
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: i18n("Drop PNG/JPG into %1", processor.textureCatalogDir())
+                    wrapMode: Text.WordWrap
+                    color: Kirigami.Theme.disabledTextColor
+                    visible: overlayItems.length === 0
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: overlayItems.length > 0
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/reset-effects.svg" }
+                        Controls.ToolTip.text: i18n("Reset overlay opacity")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.textureOpacity = 0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: 0; to: 100; stepSize: 5
+                        value: processor.textureOpacity * 100
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.textureOpacity * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.textureOpacity = value / 100
                             previewDebounce.restart()
                         }
                     }

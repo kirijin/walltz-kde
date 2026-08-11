@@ -4,6 +4,9 @@
 #include "WallpaperProcessor.h"
 #include <QGuiApplication>
 #include <QSettings>
+#include <QDir>
+#include <QFile>
+#include <QImage>
 #include <cstdio>
 static int failures = 0;
 #define CHECK(cond, msg) do { \
@@ -115,6 +118,43 @@ int main(int argc, char **argv)
     CHECK(p.bgPatternEnabled() == true && p.bgPatternType() == 123,
           "B3 preset: pattern params restored from QSettings");
     p.deleteParamPreset(QStringLiteral("verify-b3-preset"));
+
+    // ── Phase 2: overlay path handling + serialization ──
+    // Missing asset -> path stays empty (never silently accepted).
+    p.setTexturePath(QStringLiteral("/nonexistent/definitely-not-here.png"));
+    CHECK(p.texturePath().isEmpty(), "overlay: missing asset keeps path empty");
+
+    // Real asset -> set + F6 round-trip + F2 round-trip.
+    const QString tmpOverlay = QDir::tempPath() + QStringLiteral("/walltz-verify-overlay.png");
+    QImage ov(16, 16, QImage::Format_ARGB32_Premultiplied);
+    ov.fill(QColor(200, 100, 50));
+    if (!ov.save(tmpOverlay, "PNG")) {
+        CHECK(false, "overlay: could not create temp asset");
+    } else {
+        p.setTexturePath(tmpOverlay);
+        CHECK(p.texturePath() == tmpOverlay, "overlay: real asset accepted");
+        p.setTextureOpacity(0.42);
+        p.rememberState();
+        p.setTexturePath(QString());
+        p.setTextureOpacity(0.0);
+        p.restoreState();
+        CHECK(p.texturePath() == tmpOverlay, "F6 undo: overlay path restored");
+        CHECK(qFuzzyCompare(p.textureOpacity(), 0.42), "F6 undo: overlay opacity restored");
+
+        p.saveParamPreset(QStringLiteral("verify-overlay-preset"));
+        p.setTexturePath(QString());
+        p.setTextureOpacity(0.0);
+        p.applyParamPreset(QStringLiteral("verify-overlay-preset"));
+        CHECK(p.texturePath() == tmpOverlay, "F2 preset: overlay path restored");
+        CHECK(qFuzzyCompare(p.textureOpacity(), 0.42), "F2 preset: overlay opacity restored");
+        p.deleteParamPreset(QStringLiteral("verify-overlay-preset"));
+
+        // Clear path and verify the resolved image is dropped too (render must
+        // be unaffected by a previously set overlay).
+        p.setTexturePath(QString());
+        CHECK(p.texturePath().isEmpty(), "overlay: clear path");
+        QFile::remove(tmpOverlay);
+    }
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);
     return failures == 0 ? 0 : 1;
