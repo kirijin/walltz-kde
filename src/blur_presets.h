@@ -27,6 +27,11 @@ struct BlurConfig {
     bool frameEnabled   = false;
     int  frameWidthPct  = 0;       // frame width % of min dim (Reddit: 1)
 
+    // Float color grade (Phase 1) — neutral unless a preset sets them.
+    double gamma      = 1.0;       // per-channel curve
+    double warmth     = 0.0;       // -1..1, R/B balance (positive = warm)
+    double blackLift  = 0.0;       // shadow floor 0..1 (faded-film look)
+
     /// The "Default" preset is the immutable factory baseline — must not be overwritten.
     bool isLocked() const { return qstrcmp(id, "default") == 0; }
 };

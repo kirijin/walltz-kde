@@ -7,6 +7,7 @@
 #include "WallpaperProcessor.h"
 #include <QGuiApplication>
 #include <cstdio>
+#include <cmath>
 
 static int failures = 0;
 #define CHECK(cond, msg) do { \
@@ -136,6 +137,82 @@ int main(int argc, char **argv)
         rs.sourceImage = QImage();
         QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
         CHECK(out.isNull(), "null source: returns null (no crash)");
+    }
+
+    // ── Float color grade (Phase 1): gamma / warmth / blackLift ──
+    // All tests render a flat source; corners sample pure background. NOTE:
+    // blur mode draws a 25-alpha black overlay before blurring (composition
+    // design, renderCore), so the pre-grade gray is 128*(1-25/255) ≈ 115.45,
+    // not 128. Expectations are therefore derived from the NEUTRAL control
+    // render (same composition, no grade) — self-consistent, robust to
+    // composition details. Dither tolerance ±2-3.
+    QImage flat(64, 64, QImage::Format_ARGB32_Premultiplied);
+    flat.fill(QColor(128, 128, 128));
+    QImage black(64, 64, QImage::Format_ARGB32_Premultiplied);
+    black.fill(QColor(0, 0, 0));
+
+    auto neutralBase = [&](const QImage &src) {
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = true;
+        rs.blurRadius = 4;
+        rs.saturationFactor = 1.0;
+        rs.sourceImage = src;
+        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+        return out.pixelColor(4, 4);
+    };
+
+    {
+        // gamma=2.0 on mid-gray: out = 255*(v0/255)^2 where v0 = neutral gray
+        QColor n = neutralBase(flat);
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = true;
+        rs.blurRadius = 4;
+        rs.saturationFactor = 1.0;
+        rs.colorGamma = 2.0;
+        rs.sourceImage = flat;
+        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+        int expected = qRound(255.0 * std::pow(n.red() / 255.0, 2.0));
+        int v = out.pixelColor(4, 4).red();
+        CHECK(qAbs(v - expected) <= 3, "color-grade: gamma=2.0 matches 255*(v0/255)^2");
+        CHECK(out.pixelColor(4, 4).alpha() == 255, "color-grade: opaque");
+    }
+    {
+        // warmth=1.0: r *= 1.15, b *= 0.85 on the neutral base
+        QColor n = neutralBase(flat);
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = true;
+        rs.blurRadius = 4;
+        rs.saturationFactor = 1.0;
+        rs.colorWarmth = 1.0;
+        rs.sourceImage = flat;
+        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+        QColor c = out.pixelColor(4, 4);
+        int er = qRound(qMin(255.0, n.red() * 1.15));
+        int eb = qRound(qMin(255.0, n.blue() * 0.85));
+        CHECK(qAbs(c.red() - er) <= 3 && qAbs(c.blue() - eb) <= 3,
+              "color-grade: warmth=1.0 scales r up, b down per design");
+    }
+    {
+        // blackLift=0.5 on black: floor at 127.5 -> >= 126
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = true;
+        rs.blurRadius = 4;
+        rs.saturationFactor = 1.0;
+        rs.colorBlackLift = 0.5;
+        rs.sourceImage = black;
+        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+        QColor c = out.pixelColor(4, 4);
+        CHECK(c.red() >= 126 && c.green() >= 126 && c.blue() >= 126,
+              "color-grade: blackLift=0.5 floors black at ~127");
+    }
+    {
+        // Neutral params == no-op: gray stays gray, no channel skew
+        QColor c = neutralBase(flat);
+        CHECK(qAbs(c.red() - c.blue()) <= 2, "color-grade: neutral params leave gray neutral");
     }
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);

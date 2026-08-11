@@ -31,6 +31,9 @@ namespace WalltzDefaults {
     inline constexpr int    blurRadius       = 90;    // px; 0 = auto
     inline constexpr double saturationFactor = 1.8;
     inline constexpr double blurBrightness   = 1.0;
+    inline constexpr double colorGamma       = 1.0;   // per-channel curve (float stage)
+    inline constexpr double colorWarmth      = 0.0;   // -1..1, R/B balance (positive = warm)
+    inline constexpr double colorBlackLift   = 0.0;   // shadow floor 0..1 (faded-film look)
     inline constexpr double overlayOpacity   = 0.0;
     inline constexpr double bgZoom           = 1.0;
     inline constexpr double bgBlurAngle      = 0.0;
@@ -101,6 +104,9 @@ struct RenderSnapshot {
     double vignetteStrength = WalltzDefaults::vignetteStrength;
     double grainStrength = WalltzDefaults::grainStrength;
     double caStrength = WalltzDefaults::caStrength;
+    double colorGamma = WalltzDefaults::colorGamma;
+    double colorWarmth = WalltzDefaults::colorWarmth;
+    double colorBlackLift = WalltzDefaults::colorBlackLift;
     bool   photoFrame = false;
     int    photoFrameWidth = WalltzDefaults::photoFrameWidth;
     double fgZoom = WalltzDefaults::fgZoom;
@@ -191,6 +197,9 @@ public:
     int aspectMode() const { return m_aspectMode; }
     int blurRadius() const { return m_blurRadius; }
     double saturationFactor() const { return m_saturationFactor; }
+    double colorGamma() const { return m_colorGamma; }
+    double colorWarmth() const { return m_colorWarmth; }
+    double colorBlackLift() const { return m_colorBlackLift; }
     double overlayOpacity() const { return m_overlayOpacity; }
     QColor overlayColor() const { return m_overlayColor; }
     double blurBrightness() const { return m_blurBrightness; }
@@ -237,6 +246,9 @@ public:
     void setAutoColor(bool autoC);
     void setBlurRadius(int r);
     void setSaturationFactor(double f);
+    void setColorGamma(double g);
+    void setColorWarmth(double w);
+    void setColorBlackLift(double l);
     void setOverlayOpacity(double o);
     void setOverlayColor(const QColor &c);
     void setBlurBrightness(double b);
@@ -394,6 +406,9 @@ private:
 
     int m_blurRadius = WalltzDefaults::blurRadius;
     double m_saturationFactor = WalltzDefaults::saturationFactor;
+    double m_colorGamma = WalltzDefaults::colorGamma;
+    double m_colorWarmth = WalltzDefaults::colorWarmth;
+    double m_colorBlackLift = WalltzDefaults::colorBlackLift;
     QString m_blurPresetId = QStringLiteral("default");
     int m_blurPresetIndex = 0;
     double m_overlayOpacity = WalltzDefaults::overlayOpacity;
@@ -492,11 +507,17 @@ private:
 public:
     /// True separable Gaussian blur + float saturation/overlay/brightness.
     /// Replaces the old O(n) box cascade (which caused gradient banding).
+    /// colorGamma/warmth/blackLift are the float color-grade stage (Phase 1):
+    /// applied gamma -> warmth -> blackLift -> clamp inside the float buffer,
+    /// before the single 8-bit dither. All three default neutral (no-op).
     static void stackBlur(QImage &image, double sigma,
                           double saturationFactor = 0.0,
                           double overlayOpacity = 0.0,
                           QRgb overlayColor = 0,
-                          double brightness = 1.0);
+                          double brightness = 1.0,
+                          double colorGamma = 1.0,
+                          double colorWarmth = 0.0,
+                          double colorBlackLift = 0.0);
 
     /// Unified render core (Q1). Thread-safe: reads only the snapshot.
     /// Public so it can be exercised by tests and embedded callers.

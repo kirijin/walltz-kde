@@ -39,19 +39,40 @@ int main(int argc, char **argv)
     CHECK(qFuzzyCompare(p.bgZoom(), 1.4), "F6 restore: bgZoom == 1.4");
     CHECK(qFuzzyCompare(p.vignetteStrength(), 0.7), "F6 restore: vignette == 0.7");
     CHECK(p.photoFrame() && p.photoFrameWidth() == 9, "F6 restore: frame on, width 9");
+    // Phase 1: float color grade params survive F6 undo round-trip.
+    p.setColorGamma(1.3);
+    p.setColorWarmth(-0.4);
+    p.setColorBlackLift(0.25);
+    p.rememberState();
+    p.setColorGamma(1.0);
+    p.setColorWarmth(0.0);
+    p.setColorBlackLift(0.0);
+    p.restoreState();
+    CHECK(qFuzzyCompare(p.colorGamma(), 1.3), "F6 restore: colorGamma == 1.3");
+    CHECK(qFuzzyCompare(p.colorWarmth(), -0.4), "F6 restore: colorWarmth == -0.4");
+    CHECK(qFuzzyCompare(p.colorBlackLift(), 0.25), "F6 restore: colorBlackLift == 0.25");
     p.setBgGradientStyle(2);
     p.setAutoMood(3);
     p.setUseV2(true);
+    p.setColorGamma(0.9);
+    p.setColorWarmth(0.6);
+    p.setColorBlackLift(0.1);
     p.saveParamPreset(QStringLiteral("verify-test-preset"));
     CHECK(p.paramPresetNames().contains(QStringLiteral("verify-test-preset")),
           "F2: preset saved and listed");
     p.setBgGradientStyle(0);
     p.setAutoMood(0);
     p.setUseV2(false);
+    p.setColorGamma(1.0);
+    p.setColorWarmth(0.0);
+    p.setColorBlackLift(0.0);
     p.applyParamPreset(QStringLiteral("verify-test-preset"));
     CHECK(p.bgGradientStyle() == 2, "F2: apply restored gradient style 2");
     CHECK(p.autoMood() == 3, "F2: apply restored mood 3");
     CHECK(p.useV2() == true, "F2: apply restored useV2");
+    CHECK(qFuzzyCompare(p.colorGamma(), 0.9), "F2: apply restored colorGamma 0.9");
+    CHECK(qFuzzyCompare(p.colorWarmth(), 0.6), "F2: apply restored colorWarmth 0.6");
+    CHECK(qFuzzyCompare(p.colorBlackLift(), 0.1), "F2: apply restored colorBlackLift 0.1");
     p.deleteParamPreset(QStringLiteral("verify-test-preset"));
     CHECK(!p.paramPresetNames().contains(QStringLiteral("verify-test-preset")),
           "F2: preset deleted");

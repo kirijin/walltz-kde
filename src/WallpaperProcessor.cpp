@@ -268,6 +268,24 @@ void WallpaperProcessor::setSaturationFactor(double f)
     if (!qFuzzyCompare(m_saturationFactor, f)) { m_saturationFactor = f; Q_EMIT renderParamsChanged(); }
 }
 
+void WallpaperProcessor::setColorGamma(double g)
+{
+    g = qBound(0.5, g, 2.5);
+    if (!qFuzzyCompare(m_colorGamma, g)) { m_colorGamma = g; Q_EMIT renderParamsChanged(); }
+}
+
+void WallpaperProcessor::setColorWarmth(double w)
+{
+    w = qBound(-1.0, w, 1.0);
+    if (!qFuzzyCompare(m_colorWarmth, w)) { m_colorWarmth = w; Q_EMIT renderParamsChanged(); }
+}
+
+void WallpaperProcessor::setColorBlackLift(double l)
+{
+    l = qBound(0.0, l, 1.0);
+    if (!qFuzzyCompare(m_colorBlackLift, l)) { m_colorBlackLift = l; Q_EMIT renderParamsChanged(); }
+}
+
 void WallpaperProcessor::setBgGradientStyle(int s)
 {
     s = qBound(0, s, 2);
@@ -702,6 +720,9 @@ RenderSnapshot WallpaperProcessor::captureSnapshot(const QImage &src, int W, int
     rs.bgBlurAngle         = m_bgBlurAngle;
     rs.blurRadius          = m_blurRadius;
     rs.saturationFactor    = m_saturationFactor;
+    rs.colorGamma          = m_colorGamma;
+    rs.colorWarmth         = m_colorWarmth;
+    rs.colorBlackLift      = m_colorBlackLift;
     rs.overlayOpacity      = m_overlayOpacity;
     rs.overlayColor        = m_overlayColor.rgb();
     rs.blurBrightness      = m_blurBrightness;
@@ -823,7 +844,8 @@ QImage WallpaperProcessor::renderCore(const RenderSnapshot &rs,
             ? qMax(1.0, (double)rs.blurRadius)
             : qMax(0.5, 0.017 * H);
         WallpaperProcessor::stackBlur(blurTarget, sigma, rs.saturationFactor,
-                                      rs.overlayOpacity, rs.overlayColor, rs.blurBrightness);
+                                      rs.overlayOpacity, rs.overlayColor, rs.blurBrightness,
+                                      rs.colorGamma, rs.colorWarmth, rs.colorBlackLift);
         p.begin(&output);
         p.drawImage(0, 0, blurTarget);
     } else {
@@ -2083,7 +2105,8 @@ static void boostSaturationFloat(float *buf, int nPix, double factor)
 }
 
 void WallpaperProcessor::stackBlur(QImage &image, double sigma, double saturationFactor,
-                                    double overlayOpacity, QRgb overlayColor, double brightness)
+                                    double overlayOpacity, QRgb overlayColor, double brightness,
+                                    double colorGamma, double colorWarmth, double colorBlackLift)
 {
     if (sigma < 0.5 || image.isNull()) return;
     if (image.format() != QImage::Format_ARGB32_Premultiplied)
@@ -2160,6 +2183,39 @@ void WallpaperProcessor::stackBlur(QImage &image, double sigma, double saturatio
         for (int i=0;i<nPix;++i){ float *px=buf1.data()+i*4;
             px[0]=qMin(px[0]*b,255.0f); px[1]=qMin(px[1]*b,255.0f); px[2]=qMin(px[2]*b,255.0f); }
     }
+
+    // ── Float color grade (Phase 1): gamma -> warmth -> blackLift -> clamp.
+    // Lives in the float buffer BEFORE the single 8-bit dither (precision
+    // invariant). Neutral fast path: all three at defaults = zero cost.
+    // gamma uses a per-render 4096-entry FLOAT LUT (µs to build, ~0.02% step)
+    // — this is deliberately NOT an 8-bit table; the 2026-07-30 banding
+    // regression came from 8-bit-domain quantization.
+    const bool doGamma = std::abs(colorGamma - 1.0) > 0.001;
+    const bool doWarm  = std::abs(colorWarmth) > 0.001;
+    const bool doLift  = colorBlackLift > 0.001;
+    if (doGamma || doWarm || doLift) {
+        std::vector<float> glut;
+        if (doGamma) {
+            glut.resize(4096);
+            for (int i = 0; i < 4096; ++i)
+                glut[i] = 255.0f * std::pow((float)i / 4095.0f, (float)colorGamma);
+        }
+        const float wr = 1.0f + 0.15f * (float)colorWarmth;
+        const float wb = 1.0f - 0.15f * (float)colorWarmth;
+        const float lift = 255.0f * (float)colorBlackLift;
+        for (int i = 0; i < nPix; ++i) {
+            float *px = buf1.data() + i * 4;
+            for (int c = 0; c < 3; ++c) {
+                float v = px[c];
+                if (doGamma) v = glut[qBound(0, (int)(v / 255.0f * 4095.0f), 4095)];
+                // Buffer is B,G,R,A (QImage ARGB32 byte order): c==0 is BLUE,
+                // c==2 is RED. Warm = red up, blue down.
+                if (doWarm)  v *= (c == 0) ? wb : (c == 2) ? wr : 1.0f;
+                if (doLift && v < lift) v = lift;
+                px[c] = qBound(0.0f, v, 255.0f);
+            }
+        }
+    }
     floatToImageDithered(buf1.data(), image);
 }
 
@@ -2176,6 +2232,9 @@ void WallpaperProcessor::setBlurPresetIndex(int index)
     m_blurPresetIndex = index;
     m_blurRadius   = qMax(0, (int)cfg.sigma);
     m_saturationFactor = cfg.satBoost;
+    m_colorGamma     = cfg.gamma;
+    m_colorWarmth    = cfg.warmth;
+    m_colorBlackLift = cfg.blackLift;
     m_overlayOpacity   = cfg.overlayOpacity;
     m_overlayColor     = QColor::fromRgb(cfg.overlayColor);
     m_blurBrightness   = cfg.brightness;
@@ -2195,6 +2254,9 @@ void WallpaperProcessor::resetBlurToDefault()
     m_blurPresetIndex = 0;
     m_blurRadius   = WalltzDefaults::blurRadius;
     m_saturationFactor = WalltzDefaults::saturationFactor;
+    m_colorGamma     = WalltzDefaults::colorGamma;
+    m_colorWarmth    = WalltzDefaults::colorWarmth;
+    m_colorBlackLift = WalltzDefaults::colorBlackLift;
     m_overlayOpacity   = WalltzDefaults::overlayOpacity;
     m_overlayColor     = Qt::black;
     m_blurBrightness   = WalltzDefaults::blurBrightness;
@@ -2377,6 +2439,9 @@ QVariantMap WallpaperProcessor::serializeParams() const
     m.insert(QStringLiteral("gradientAngle"), m_gradientAngle);
     m.insert(QStringLiteral("blurRadius"), m_blurRadius);
     m.insert(QStringLiteral("saturationFactor"), m_saturationFactor);
+    m.insert(QStringLiteral("colorGamma"), m_colorGamma);
+    m.insert(QStringLiteral("colorWarmth"), m_colorWarmth);
+    m.insert(QStringLiteral("colorBlackLift"), m_colorBlackLift);
     m.insert(QStringLiteral("overlayOpacity"), m_overlayOpacity);
     m.insert(QStringLiteral("overlayColor"), m_overlayColor.name());
     m.insert(QStringLiteral("blurBrightness"), m_blurBrightness);
@@ -2418,6 +2483,9 @@ void WallpaperProcessor::deserializeParams(const QVariantMap &m)
     m_gradientAngle    = m.value(QStringLiteral("gradientAngle"), m_gradientAngle).toDouble();
     m_blurRadius       = m.value(QStringLiteral("blurRadius"), m_blurRadius).toInt();
     m_saturationFactor = m.value(QStringLiteral("saturationFactor"), m_saturationFactor).toDouble();
+    m_colorGamma       = m.value(QStringLiteral("colorGamma"), m_colorGamma).toDouble();
+    m_colorWarmth      = m.value(QStringLiteral("colorWarmth"), m_colorWarmth).toDouble();
+    m_colorBlackLift   = m.value(QStringLiteral("colorBlackLift"), m_colorBlackLift).toDouble();
     m_overlayOpacity   = m.value(QStringLiteral("overlayOpacity"), m_overlayOpacity).toDouble();
     m_overlayColor     = QColor(m.value(QStringLiteral("overlayColor"), m_overlayColor.name()).toString());
     m_blurBrightness   = m.value(QStringLiteral("blurBrightness"), m_blurBrightness).toDouble();
