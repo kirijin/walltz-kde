@@ -11,6 +11,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QDir>
+#include <QFileInfo>
 #include <cstdio>
 #include <cmath>
 
@@ -62,17 +63,17 @@ int main(int argc, char **argv)
     QString outDir = argc > 1 ? QString::fromUtf8(argv[1]) : QStringLiteral(".");
     QDir().mkpath(outDir);
 
-    struct Source { const char *name; QImage img; };
+    struct Source { QString name; QImage img; };
     QVector<Source> sources = {
-        { "landscape", landscapeSource() },
-        { "dark",      darkSource() },
-        { "vibrant",   vibrantSource() },
+        { QStringLiteral("landscape"), landscapeSource() },
+        { QStringLiteral("dark"),      darkSource() },
+        { QStringLiteral("vibrant"),   vibrantSource() },
     };
     // Optional real photos appended via argv[2..]
     for (int i = 2; i < argc; ++i) {
         QImage photo(QString::fromUtf8(argv[i]));
         if (!photo.isNull())
-            sources.append({ QFileInfo(QString::fromUtf8(argv[i])).baseName().toUtf8().constData(),
+            sources.append({ QFileInfo(QString::fromUtf8(argv[i])).completeBaseName(),
                              photo.scaled(320, 180, Qt::KeepAspectRatioByExpanding) });
     }
 
@@ -97,7 +98,7 @@ int main(int argc, char **argv)
             rs.sourceImage      = s.img;
             QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
             QString fname = outDir + QStringLiteral("/%1_%2.png")
-                              .arg(QString::fromUtf8(cfg.id), QString::fromUtf8(s.name));
+                              .arg(QString::fromUtf8(cfg.id), s.name);
             if (!out.save(fname, "PNG"))
                 std::printf("FAIL: could not save %s\n", qPrintable(fname));
             else

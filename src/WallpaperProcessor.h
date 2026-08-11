@@ -300,9 +300,8 @@ public:
     Q_INVOKABLE QString gradientPresetColor2(int index) const;
     Q_INVOKABLE double aspectRatioForMode(int mode) const;
 
-    /// Overlay catalog (user assets in AppDataLocation/overlays) + thumbnails.
+    /// Overlay catalog (user assets in AppDataLocation/overlays).
     Q_INVOKABLE QStringList textureCatalog();
-    Q_INVOKABLE QString textureThumbnail(int index, int thumbSize = 96);
     Q_INVOKABLE QString textureCatalogDir() const;
 
     /// Mood palette access
@@ -491,7 +490,6 @@ private:
     int     m_textureBlendMode = WalltzDefaults::textureBlendMode;
     QImage  m_textureLoaded;                     // resolved on the main thread
     QStringList m_textureCatalog;                // cached scan of the overlays dir
-    mutable QHash<int, QString> m_textureThumbCache;
 
     /// Build a fully-resolved snapshot from current member state + source.
     /// Must be called on the main thread (reads members, resolves mood colors).

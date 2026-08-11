@@ -384,6 +384,12 @@ void WallpaperProcessor::setTexturePath(const QString &path)
     }
     m_texturePath = path;
     m_textureLoaded = img;
+    // A later successful pick clears a stale "Overlay not found" error so the
+    // status bar can't lie after the user fixes the selection.
+    if (m_statusMessage.startsWith(QStringLiteral("Overlay not found"))) {
+        m_statusMessage.clear();
+        Q_EMIT statusMessageChanged();
+    }
     Q_EMIT renderParamsChanged();
 }
 
@@ -2497,16 +2503,6 @@ QStringList WallpaperProcessor::textureCatalog()
         Q_EMIT textureCatalogChanged();
     }
     return m_textureCatalog;
-}
-
-QString WallpaperProcessor::textureThumbnail(int index, int thumbSize)
-{
-    Q_UNUSED(thumbSize);
-    const QStringList cat = textureCatalog();
-    if (index < 0 || index >= cat.size()) return {};
-    // The asset IS the thumbnail: return its file URL; QML's Image sourceSize
-    // downscales at load, so no scaled copies are needed.
-    return QUrl::fromLocalFile(cat.at(index)).toString();
 }
 
 // ── F2: named-parameter presets (QSettings-backed) ─────────────────────

@@ -428,7 +428,7 @@ Kirigami.ApplicationWindow {
                         processor.pipZoom = processor.defaultPipZoom()
                         processor.photoFrameWidth = processor.defaultPhotoFrameWidth()
                         processor.photoFrame = false
-                        processor.setTexturePath("")
+                        processor.texturePath = ""
                         processor.textureOpacity = 0
                         previewDebounce.restart()
                     }
@@ -1204,6 +1204,7 @@ Kirigami.ApplicationWindow {
             // ── Right column: effects ──
             ColumnLayout {
                 id: rightColumn
+                property var overlayItems: processor.textureCatalog()
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 14
                 Layout.minimumWidth: Kirigami.Units.gridUnit * 14
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 14
@@ -1344,7 +1345,7 @@ Kirigami.ApplicationWindow {
                         Controls.ToolTip.visible: hovered
                         Controls.ToolTip.delay: 400
                         onClicked: {
-                            processor.setTexturePath("")
+                            processor.texturePath = ""
                             previewDebounce.restart()
                         }
                     }
@@ -1356,10 +1357,18 @@ Kirigami.ApplicationWindow {
                     Item { Layout.fillWidth: true }
                 }
 
-                property var overlayItems: processor.textureCatalog()
                 Connections {
                     target: processor
                     function onTextureCatalogChanged() { overlayItems = processor.textureCatalog() }
+                }
+
+                // Live refresh: re-scan the overlays dir so files dropped while
+                // the app runs appear without a restart. Dir listing is cheap.
+                Timer {
+                    interval: 5000
+                    repeat: true
+                    running: true
+                    onTriggered: overlayItems = processor.textureCatalog()
                 }
 
                 ListView {
@@ -1393,7 +1402,7 @@ Kirigami.ApplicationWindow {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                processor.setTexturePath(modelData)
+                                processor.texturePath = modelData
                                 previewDebounce.restart()
                             }
                         }
