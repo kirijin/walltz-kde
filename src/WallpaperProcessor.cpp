@@ -764,6 +764,8 @@ RenderSnapshot WallpaperProcessor::captureSnapshot(const QImage &src, int W, int
     rs.textureImage        = m_texturePath.isEmpty() ? QImage() : m_textureLoaded;
     rs.textureOpacity      = m_textureOpacity;
     rs.textureBlendMode    = m_textureBlendMode;
+    rs.textureOverPhoto    = m_textureOverPhoto;
+    rs.photoGrade          = m_photoGrade;
     rs.overlayOpacity      = m_overlayOpacity;
     rs.overlayColor        = m_overlayColor.rgb();
     rs.blurBrightness      = m_blurBrightness;
@@ -809,6 +811,13 @@ RenderSnapshot WallpaperProcessor::captureSnapshot(const QImage &src, int W, int
 // Single pipeline for both full output and preview. Thread-safe: reads only
 // the snapshot. Background fill, pattern overlay, effects, composition,
 // shadow, frame, foreground and CA all run here exactly once.
+
+// Forward decls — the float pipeline helpers are defined below renderCore.
+static void imageToFloat(const QImage &img, float *buf);
+static void floatToImageDithered(const float *buf, QImage &img);
+static void boostSaturationFloat(float *buf, int nPix, double factor);
+static void applyColorGradeFloat(float *buf, int nPix, double gamma, double warmth, double blackLift);
+static QImage gradedCopy(const QImage &src, double sat, double gamma, double warmth, double blackLift);
 
 QImage WallpaperProcessor::renderCore(const RenderSnapshot &rs,
                                       double *outMinZoom,
@@ -1013,8 +1022,28 @@ QImage WallpaperProcessor::renderCore(const RenderSnapshot &rs,
     p.translate(fgCx + imgW / 2.0, fgCy + imgH / 2.0);
     p.scale(imgW / (double)src.width() * rs.pipZoom,
             imgH / (double)src.height() * rs.pipZoom);
-    p.drawImage(-src.width() / 2.0, -src.height() / 2.0, src);
+    // Retro look: grade the photo itself (sat + gamma/warmth/blackLift) so the
+    // subject changes with the look — the blurred background gets the same
+    // params inside stackBlur, keeping the composition coherent.
+    const QImage photo = rs.photoGrade
+        ? gradedCopy(src, rs.saturationFactor, rs.colorGamma, rs.colorWarmth, rs.colorBlackLift)
+        : src;
+    p.drawImage(-src.width() / 2.0, -src.height() / 2.0, photo);
     p.restore();
+
+    // ── Texture overlay OVER the photo (retro looks: film borders/frames) ──
+    // The under-photo placement (before the shadow block) serves leaks; looks
+    // with textureOverPhoto draw here so the texture covers the subject —
+    // the XnRetro way, where the frame/leak sits on top of the image.
+    // Painter still active and canvas-transformed here (before p.end()).
+    if (rs.textureOverPhoto && !rs.textureImage.isNull() && rs.textureOpacity > 0.001) {
+        p.save();
+        p.setCompositionMode(static_cast<QPainter::CompositionMode>(rs.textureBlendMode));
+        p.setOpacity(qBound(0.0, rs.textureOpacity, 1.0));
+        p.drawImage(QRect(0, 0, W, H), rs.textureImage,
+                    QRectF(0, 0, rs.textureImage.width(), rs.textureImage.height()));
+        p.restore();
+    }
     p.end();
 
     // ── Chromatic aberration (B1: locals renamed, no shadow of fgCx/fgCy) ──
@@ -2157,6 +2186,56 @@ static void boostSaturationFloat(float *buf, int nPix, double factor)
     }
 }
 
+// ── Float color grade (Phase 1) ─────────────────────────────────────────
+// Shared by the background (stackBlur) and the foreground photo (gradedCopy).
+// Operates on the float buffer BEFORE any 8-bit quantization; neutral params
+// hit the fast path (zero cost). Buffer is B,G,R,A (QImage ARGB32 byte
+// order): c==0 is BLUE, c==2 is RED. Warm = red up, blue down.
+static void applyColorGradeFloat(float *buf, int nPix,
+                                 double gamma, double warmth, double blackLift)
+{
+    const bool doGamma = std::abs(gamma - 1.0) > 0.001;
+    const bool doWarm  = std::abs(warmth) > 0.001;
+    const bool doLift  = blackLift > 0.001;
+    if (!(doGamma || doWarm || doLift)) return;
+    std::vector<float> glut;
+    if (doGamma) {
+        glut.resize(4096);
+        for (int i = 0; i < 4096; ++i)
+            glut[i] = 255.0f * std::pow((float)i / 4095.0f, (float)gamma);
+    }
+    const float wr = 1.0f + 0.15f * (float)warmth;
+    const float wb = 1.0f - 0.15f * (float)warmth;
+    const float lift = 255.0f * (float)blackLift;
+    for (int i = 0; i < nPix; ++i) {
+        float *px = buf + i * 4;
+        for (int c = 0; c < 3; ++c) {
+            float v = px[c];
+            if (doGamma) v = glut[qBound(0, (int)(v / 255.0f * 4095.0f), 4095)];
+            if (doWarm)  v *= (c == 0) ? wb : (c == 2) ? wr : 1.0f;
+            if (doLift && v < lift) v = lift;
+            px[c] = qBound(0.0f, v, 255.0f);
+        }
+    }
+}
+
+// Foreground photo grade (retro looks): sat (0 = B&W) + gamma/warmth/blackLift
+// through the same float pipeline as the background, single dither at the end.
+// Neutral fast path returns an implicit share — zero cost when no look is on.
+static QImage gradedCopy(const QImage &src, double sat, double gamma, double warmth, double blackLift)
+{
+    if (std::abs(sat - 1.0) < 0.001 && std::abs(gamma - 1.0) < 0.001
+        && std::abs(warmth) < 0.001 && blackLift < 0.001)
+        return src;
+    QImage work = src.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    std::vector<float> buf(size_t(work.width()) * work.height() * 4);
+    imageToFloat(work, buf.data());
+    boostSaturationFloat(buf.data(), work.width() * work.height(), sat);
+    applyColorGradeFloat(buf.data(), work.width() * work.height(), gamma, warmth, blackLift);
+    floatToImageDithered(buf.data(), work);
+    return work;
+}
+
 void WallpaperProcessor::stackBlur(QImage &image, double sigma, double saturationFactor,
                                     double overlayOpacity, QRgb overlayColor, double brightness,
                                     double colorGamma, double colorWarmth, double colorBlackLift)
@@ -2239,36 +2318,9 @@ void WallpaperProcessor::stackBlur(QImage &image, double sigma, double saturatio
 
     // ── Float color grade (Phase 1): gamma -> warmth -> blackLift -> clamp.
     // Lives in the float buffer BEFORE the single 8-bit dither (precision
-    // invariant). Neutral fast path: all three at defaults = zero cost.
-    // gamma uses a per-render 4096-entry FLOAT LUT (µs to build, ~0.02% step)
-    // — this is deliberately NOT an 8-bit table; the 2026-07-30 banding
-    // regression came from 8-bit-domain quantization.
-    const bool doGamma = std::abs(colorGamma - 1.0) > 0.001;
-    const bool doWarm  = std::abs(colorWarmth) > 0.001;
-    const bool doLift  = colorBlackLift > 0.001;
-    if (doGamma || doWarm || doLift) {
-        std::vector<float> glut;
-        if (doGamma) {
-            glut.resize(4096);
-            for (int i = 0; i < 4096; ++i)
-                glut[i] = 255.0f * std::pow((float)i / 4095.0f, (float)colorGamma);
-        }
-        const float wr = 1.0f + 0.15f * (float)colorWarmth;
-        const float wb = 1.0f - 0.15f * (float)colorWarmth;
-        const float lift = 255.0f * (float)colorBlackLift;
-        for (int i = 0; i < nPix; ++i) {
-            float *px = buf1.data() + i * 4;
-            for (int c = 0; c < 3; ++c) {
-                float v = px[c];
-                if (doGamma) v = glut[qBound(0, (int)(v / 255.0f * 4095.0f), 4095)];
-                // Buffer is B,G,R,A (QImage ARGB32 byte order): c==0 is BLUE,
-                // c==2 is RED. Warm = red up, blue down.
-                if (doWarm)  v *= (c == 0) ? wb : (c == 2) ? wr : 1.0f;
-                if (doLift && v < lift) v = lift;
-                px[c] = qBound(0.0f, v, 255.0f);
-            }
-        }
-    }
+    // invariant). Shared helper with the foreground photo (gradedCopy); the
+    // neutral fast path inside it costs nothing for non-look renders.
+    applyColorGradeFloat(buf1.data(), nPix, colorGamma, colorWarmth, colorBlackLift);
     floatToImageDithered(buf1.data(), image);
 }
 
@@ -2314,6 +2366,9 @@ void WallpaperProcessor::resetBlurToDefault()
     m_textureLoaded = QImage();
     m_textureOpacity   = 0.0;
     m_textureBlendMode = WalltzDefaults::textureBlendMode;
+    m_textureOverPhoto = false;
+    m_photoGrade       = false;
+    m_retroLookIndex   = -1;
     m_overlayOpacity   = WalltzDefaults::overlayOpacity;
     m_overlayColor     = Qt::black;
     m_blurBrightness   = WalltzDefaults::blurBrightness;
@@ -2511,6 +2566,50 @@ QStringList WallpaperProcessor::textureCatalog()
     return m_textureCatalog;
 }
 
+QStringList WallpaperProcessor::retroLookNames() const
+{
+    QStringList names;
+    for (int i = 0; i < retroLookCount(); ++i)
+        names << QString::fromUtf8(retroLookName(i));
+    return names;
+}
+
+void WallpaperProcessor::applyRetroLook(int index)
+{
+    if (index < 0 || index >= retroLookCount()) return;
+    const LookConfig &l = retroLookConfig(index);
+    m_saturationFactor = qBound(0.0, l.satBoost, 3.0);
+    m_colorGamma       = l.gamma;
+    m_colorWarmth      = qBound(-1.0, l.warmth, 1.0);
+    m_colorBlackLift   = qBound(0.0, l.blackLift, 1.0);
+    m_vignetteStrength = qBound(0.0, l.vignette, 1.0);
+    m_grainStrength    = qBound(0.0, l.grain, 1.0);
+    m_photoFrame       = l.frameEnabled;
+    m_photoFrameWidth  = qBound(0, l.frameWidthPct, 25);
+    m_textureOverPhoto = l.textureOverPhoto;
+    m_textureOpacity   = qBound(0.0, l.textureOpacity, 1.0);
+    m_textureBlendMode = qBound(0, l.textureBlendMode, 28);
+    m_photoGrade       = true;
+    m_retroLookIndex   = index;
+    // Resolve the optional texture asset against the overlays dir; missing
+    // asset = the look still applies (color/frame/grain), texture stays off.
+    if (l.textureAsset && *l.textureAsset) {
+        const QString path = textureCatalogDir()
+                             + QLatin1Char('/') + QString::fromUtf8(l.textureAsset);
+        if (QFileInfo::exists(path)) {
+            m_texturePath = path;
+            m_textureLoaded = QImage(path);
+        } else {
+            m_texturePath.clear();
+            m_textureLoaded = QImage();
+        }
+    } else {
+        m_texturePath.clear();
+        m_textureLoaded = QImage();
+    }
+    Q_EMIT renderParamsChanged();
+}
+
 // ── F2: named-parameter presets (QSettings-backed) ─────────────────────
 // serializeParams/deserializeParams are the single source for both the
 // persisted presets and the in-memory undo snapshot (F6) — one map, two
@@ -2533,6 +2632,9 @@ QVariantMap WallpaperProcessor::serializeParams() const
     m.insert(QStringLiteral("texturePath"), m_texturePath);
     m.insert(QStringLiteral("textureOpacity"), m_textureOpacity);
     m.insert(QStringLiteral("textureBlendMode"), m_textureBlendMode);
+    m.insert(QStringLiteral("textureOverPhoto"), m_textureOverPhoto);
+    m.insert(QStringLiteral("photoGrade"), m_photoGrade);
+    m.insert(QStringLiteral("retroLookIndex"), m_retroLookIndex);
     m.insert(QStringLiteral("overlayOpacity"), m_overlayOpacity);   // tint overlay (pre-existing)
     m.insert(QStringLiteral("overlayColor"), m_overlayColor.name());
     m.insert(QStringLiteral("blurBrightness"), m_blurBrightness);
@@ -2583,6 +2685,9 @@ void WallpaperProcessor::deserializeParams(const QVariantMap &m)
         m_texturePath.clear();   // asset vanished since the preset was saved
     m_textureOpacity   = m.value(QStringLiteral("textureOpacity"), m_textureOpacity).toDouble();
     m_textureBlendMode = qBound(0, m.value(QStringLiteral("textureBlendMode"), m_textureBlendMode).toInt(), 28);
+    m_textureOverPhoto = m.value(QStringLiteral("textureOverPhoto"), m_textureOverPhoto).toBool();
+    m_photoGrade       = m.value(QStringLiteral("photoGrade"), m_photoGrade).toBool();
+    m_retroLookIndex   = m.value(QStringLiteral("retroLookIndex"), m_retroLookIndex).toInt();
     m_overlayOpacity   = m.value(QStringLiteral("overlayOpacity"), m_overlayOpacity).toDouble();
     m_overlayColor     = QColor(m.value(QStringLiteral("overlayColor"), m_overlayColor.name()).toString());
     m_blurBrightness   = m.value(QStringLiteral("blurBrightness"), m_blurBrightness).toDouble();

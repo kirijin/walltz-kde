@@ -47,11 +47,6 @@ enum class BlurPresetId {
     Mica,
     Acrylic,
     Reddit,
-    RetroWarm,
-    RetroFaded,
-    RetroVintage,
-    RetroCool,
-    RetroPaper,
     Count   // sentinel — not a real preset
 };
 

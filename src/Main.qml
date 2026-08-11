@@ -11,6 +11,11 @@ import org.walltz.processor 1.0
 Kirigami.ApplicationWindow {
     id: root
 
+    // Retro tab: a QML-side panel flag — the looks apply a PHOTO treatment
+    // (grade + frame + texture) on top of whatever background mode is set.
+    property bool retroPanel: false
+    property bool showBgPanels: !retroPanel
+
     width: 720
     height: 720
     minimumWidth: leftColumn.Layout.minimumWidth 
@@ -550,8 +555,9 @@ Kirigami.ApplicationWindow {
                     checkable: true
                     implicitWidth: Kirigami.Units.gridUnit * 7
                     highlighted: checked
-                    checked: processor.blurMode
+                    checked: processor.blurMode && !retroPanel
                     onClicked: {
+                        retroPanel = false
                         processor.blurMode = true
                         processor.bgPatternEnabled = false
                     }
@@ -562,8 +568,9 @@ Kirigami.ApplicationWindow {
                     checkable: true
                     implicitWidth: Kirigami.Units.gridUnit * 7
                     highlighted: checked
-                    checked: !processor.blurMode && !processor.bgPatternEnabled
+                    checked: !processor.blurMode && !processor.bgPatternEnabled && !retroPanel
                     onClicked: {
+                        retroPanel = false
                         processor.blurMode = false
                         processor.bgPatternEnabled = false
                     }
@@ -574,12 +581,52 @@ Kirigami.ApplicationWindow {
                     checkable: true
                     implicitWidth: Kirigami.Units.gridUnit * 7
                     highlighted: checked
-                    checked: !processor.blurMode && processor.bgPatternEnabled
+                    checked: !processor.blurMode && processor.bgPatternEnabled && !retroPanel
                     onClicked: {
+                        retroPanel = false
                         processor.blurMode = false
                         processor.bgPatternEnabled = true
                     }
                     Controls.ButtonGroup.group: modeGroup
+                }
+                Controls.Button {
+                    text: i18n("Retro")
+                    checkable: true
+                    implicitWidth: Kirigami.Units.gridUnit * 7
+                    highlighted: checked
+                    checked: retroPanel
+                    onClicked: retroPanel = true
+                    Controls.ButtonGroup.group: modeGroup
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+
+            // ── Retro look buttons (visible when the Retro tab is active) ──
+            RowLayout {
+                visible: retroPanel
+                Layout.fillWidth: true
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
+
+                Item { Layout.fillWidth: true }
+
+                GridLayout {
+                    columns: 5
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: Kirigami.Units.smallSpacing
+
+                    Repeater {
+                        model: processor.retroLookNames()
+                        delegate: Controls.Button {
+                            text: modelData
+                            implicitWidth: Kirigami.Units.gridUnit * 7
+                            highlighted: processor.retroLookIndex === index
+                            onClicked: {
+                                processor.applyRetroLook(index)
+                                previewDebounce.restart()
+                            }
+                        }
+                    }
                 }
 
                 Item { Layout.fillWidth: true }
@@ -587,7 +634,7 @@ Kirigami.ApplicationWindow {
 
             // ── Blur preset buttons (visible when Blur mode active) ──
             RowLayout {
-                visible: processor.blurMode
+                visible: processor.blurMode && showBgPanels
                 Layout.fillWidth: true
                 Layout.bottomMargin: Kirigami.Units.smallSpacing
 
@@ -648,7 +695,7 @@ Kirigami.ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
-                visible: !processor.blurMode
+                visible: !processor.blurMode && showBgPanels
                 Layout.bottomMargin: Kirigami.Units.smallSpacing
 
                 Item { Layout.fillWidth: true }
@@ -686,7 +733,7 @@ Kirigami.ApplicationWindow {
 
             // Solid colour picker
             RowLayout {
-                visible: !processor.blurMode && processor.bgGradientStyle === 0
+                visible: !processor.blurMode && showBgPanels && processor.bgGradientStyle === 0
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
                 Layout.bottomMargin: Kirigami.Units.smallSpacing
@@ -775,7 +822,7 @@ Kirigami.ApplicationWindow {
             // Gradient preset picker (Gradient mode) — 6-col grid
             GridLayout {
                 id: gradientGrid
-                visible: !processor.blurMode && processor.bgGradientStyle === 1
+                visible: !processor.blurMode && showBgPanels && processor.bgGradientStyle === 1
                 Layout.fillWidth: false
                 Layout.alignment: Qt.AlignHCenter
                 columns: 6
@@ -827,7 +874,7 @@ Kirigami.ApplicationWindow {
             Controls.ButtonGroup { id: moodGroup }
 
             RowLayout {
-                visible: !processor.blurMode && processor.bgGradientStyle === 2
+                visible: !processor.blurMode && showBgPanels && processor.bgGradientStyle === 2
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
@@ -854,7 +901,7 @@ Kirigami.ApplicationWindow {
 
             // Mood palette V2 (Auto mode)
             RowLayout {
-                visible: !processor.blurMode && processor.bgGradientStyle === 2
+                visible: !processor.blurMode && showBgPanels && processor.bgGradientStyle === 2
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
                 Layout.bottomMargin: Kirigami.Units.smallSpacing
@@ -883,7 +930,7 @@ Kirigami.ApplicationWindow {
             // Visibility is !processor.blurMode && processor.bgPatternEnabled
             ColumnLayout {
                 id: patternControls
-                visible: !processor.blurMode && processor.bgPatternEnabled
+                visible: !processor.blurMode && showBgPanels && processor.bgPatternEnabled
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
                 property int patternCatIndex: 0
@@ -1455,7 +1502,7 @@ Kirigami.ApplicationWindow {
                     color: Kirigami.Theme.textColor
                     horizontalAlignment: Text.AlignHCenter
                     Layout.fillWidth: true
-                    visible: processor.blurMode
+                    visible: processor.blurMode && showBgPanels
                 }
 
                 // ── right pane blur sliders ──
@@ -1465,7 +1512,7 @@ Kirigami.ApplicationWindow {
                     columns: 2
                     columnSpacing: Kirigami.Units.smallSpacing
                     rowSpacing: 2
-                    visible: processor.blurMode
+                    visible: processor.blurMode && showBgPanels
 
                     Controls.ToolButton {
                         display: Controls.AbstractButton.IconOnly
@@ -1552,7 +1599,7 @@ Kirigami.ApplicationWindow {
 
                     // Background zoom (blur-mode background only)
                     Controls.ToolButton {
-                        visible: processor.blurMode
+                        visible: processor.blurMode && showBgPanels
                         display: Controls.AbstractButton.IconOnly
                         contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
                         Controls.ToolTip.text: i18n("Reset Background Zoom")
@@ -1565,7 +1612,7 @@ Kirigami.ApplicationWindow {
                     }
                     Controls.Slider {
                         id: zoomSlider
-                        visible: processor.blurMode
+                        visible: processor.blurMode && showBgPanels
                         Layout.fillWidth: true
                         from: 5; to: 30; stepSize: 1
                         value: Math.round(processor.bgZoom * 10)
@@ -1632,12 +1679,12 @@ Kirigami.ApplicationWindow {
                     color: Kirigami.Theme.textColor
                     horizontalAlignment: Text.AlignHCenter
                     Layout.fillWidth: true
-                    visible: !processor.blurMode && dropArea.fileList.length > 0
+                    visible: !processor.blurMode && showBgPanels && dropArea.fileList.length > 0
                 }
 
                 GridLayout {
                     Layout.fillWidth: true
-                    visible: !processor.blurMode && dropArea.fileList.length > 0
+                    visible: !processor.blurMode && showBgPanels && dropArea.fileList.length > 0
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
                     columns: 2
                     columnSpacing: Kirigami.Units.smallSpacing
@@ -1645,7 +1692,7 @@ Kirigami.ApplicationWindow {
 
                     // Gradient Angle
                     Controls.ToolButton {
-                        visible: !processor.blurMode && processor.bgGradientStyle > 0
+                        visible: !processor.blurMode && showBgPanels && processor.bgGradientStyle > 0
                         display: Controls.AbstractButton.IconOnly
                         contentItem: ThemedIcon { source: "qrc:/icons/angle.svg" }
                         Controls.ToolTip.text: i18n("Reset Angle")
@@ -1657,7 +1704,7 @@ Kirigami.ApplicationWindow {
                         }
                     }
                     Controls.Slider {
-                        visible: !processor.blurMode && processor.bgGradientStyle > 0
+                        visible: !processor.blurMode && showBgPanels && processor.bgGradientStyle > 0
                         Layout.fillWidth: true
                         from: 0; to: 360; stepSize: 1
                         value: processor.gradientAngle
@@ -1669,7 +1716,7 @@ Kirigami.ApplicationWindow {
 
                     // Pattern Scale
                     Controls.ToolButton {
-                        visible: !processor.blurMode && processor.bgPatternEnabled
+                        visible: !processor.blurMode && showBgPanels && processor.bgPatternEnabled
                         display: Controls.AbstractButton.IconOnly
                         contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
                         Controls.ToolTip.text: i18n("Reset Scale")
@@ -1681,7 +1728,7 @@ Kirigami.ApplicationWindow {
                         }
                     }
                     Controls.Slider {
-                        visible: !processor.blurMode && processor.bgPatternEnabled
+                        visible: !processor.blurMode && showBgPanels && processor.bgPatternEnabled
                         Layout.fillWidth: true
                         from: 3; to: 30; stepSize: 1
                         value: Math.round(processor.bgPatternScale * 10)
@@ -1696,7 +1743,7 @@ Kirigami.ApplicationWindow {
 
                     // Pattern Spacing
                     Controls.ToolButton {
-                        visible: !processor.blurMode && processor.bgPatternEnabled && patternControls.patternCatIndex !== 1
+                        visible: !processor.blurMode && showBgPanels && processor.bgPatternEnabled && patternControls.patternCatIndex !== 1
                         display: Controls.AbstractButton.IconOnly
                         contentItem: ThemedIcon { source: "qrc:/icons/zoom.svg" }
                         Controls.ToolTip.text: i18n("Reset Spacing")
@@ -1708,7 +1755,7 @@ Kirigami.ApplicationWindow {
                         }
                     }
                     Controls.Slider {
-                        visible: !processor.blurMode && processor.bgPatternEnabled && patternControls.patternCatIndex !== 1
+                        visible: !processor.blurMode && showBgPanels && processor.bgPatternEnabled && patternControls.patternCatIndex !== 1
                         Layout.fillWidth: true
                         from: 0; to: 20; stepSize: 1
                         value: Math.round(processor.bgPatternSpacing * 10)

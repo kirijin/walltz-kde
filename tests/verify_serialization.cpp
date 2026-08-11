@@ -156,17 +156,22 @@ int main(int argc, char **argv)
         QFile::remove(tmpOverlay);
     }
 
-    // ── Phase 3: retro preset application + locked-default invariant ──
-    p.setBlurPresetIndex(static_cast<int>(BlurPresetId::RetroVintage));
-    CHECK(qFuzzyCompare(p.colorGamma(), 1.08), "retro: vintage applies gamma 1.08");
-    CHECK(qFuzzyCompare(p.colorWarmth(), 0.28), "retro: vintage applies warmth 0.28");
-    CHECK(qFuzzyCompare(p.colorBlackLift(), 0.0), "retro: vintage applies blackLift 0.0");
-    CHECK(qFuzzyCompare(p.saturationFactor(), 1.6), "retro: vintage applies satBoost 1.6");
-    // Default is locked: re-selecting it must restore fully neutral color grade.
-    p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Default));
-    CHECK(qFuzzyCompare(p.colorGamma(), 1.0), "retro->default: gamma neutral");
-    CHECK(qFuzzyCompare(p.colorWarmth(), 0.0), "retro->default: warmth neutral");
-    CHECK(qFuzzyCompare(p.colorBlackLift(), 0.0), "retro->default: blackLift neutral");
+    // ── Retro look (4th tab): apply + locked-default invariant + F6 ──
+    p.applyRetroLook(1);   // Polaroid: sat 1.0, γ 0.94, warmth -0.04, lift 0.18, frame 3%
+    CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "look: polaroid applies gamma 0.94");
+    CHECK(qFuzzyCompare(p.colorWarmth(), -0.04), "look: polaroid applies warmth -0.04");
+    CHECK(qFuzzyCompare(p.saturationFactor(), 1.0), "look: polaroid applies satBoost 1.0");
+    CHECK(p.photoFrame() && p.photoFrameWidth() == 3, "look: polaroid applies frame 3%");
+    CHECK(p.retroLookIndex() == 1, "look: active look index tracked");
+    // F6 undo keeps the look state.
+    p.rememberState();
+    p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Default));   // locked -> factory reset
+    CHECK(p.retroLookIndex() == -1, "look: default clears look selection");
+    CHECK(p.photoFrame() == false, "look: default clears frame");
+    CHECK(qFuzzyCompare(p.colorGamma(), 1.0), "look: default clears grade");
+    p.restoreState();
+    CHECK(p.retroLookIndex() == 1, "F6 undo: look selection restored");
+    CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "F6 undo: look grade restored");
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);
     return failures == 0 ? 0 : 1;

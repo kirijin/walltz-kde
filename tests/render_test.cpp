@@ -266,22 +266,90 @@ int main(int argc, char **argv)
               "overlay: texture stays UNDER the foreground photo (z-order locked)");
     }
 
-    // ── Retro preset family (Phase 3): table sanity ──
+    // ── Retro look (4th tab): photo-grade + texture placement ──
     {
-        int retroCount = 0;
-        for (int i = 0; i < blurPresetCount(); ++i) {
-            const BlurConfig &c = blurPresetConfig(i);
-            if (qstrcmp(c.id, "retro_warm") == 0 || qstrcmp(c.id, "retro_faded") == 0 ||
-                qstrcmp(c.id, "retro_vintage") == 0 || qstrcmp(c.id, "retro_cool") == 0 ||
-                qstrcmp(c.id, "retro_paper") == 0) {
-                retroCount++;
-                CHECK(c.gamma >= 0.5 && c.gamma <= 2.5, "retro: gamma in range");
-                CHECK(c.warmth >= -1.0 && c.warmth <= 1.0, "retro: warmth in range");
-                CHECK(c.blackLift >= 0.0 && c.blackLift <= 1.0, "retro: blackLift in range");
-                CHECK(c.frameEnabled == false, "retro: no frame leakage");
-            }
+        // photoGrade: the FOREGROUND photo itself gets the grade (warmth=1.0
+        // on flat gray -> red up, blue down at the canvas center == photo).
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = false;
+        rs.bgGradientStyle = 0;
+        rs.autoColor = false;
+        rs.bgColor = 0xffffffff;
+        rs.photoGrade = true;
+        rs.saturationFactor = 1.0;
+        rs.colorWarmth = 1.0;
+        rs.sourceImage = flat;
+        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+        QColor c = out.pixelColor(64, 64);   // photo center
+        CHECK(c.red() - c.blue() > 25, "look: photoGrade warms the photo itself");
+    }
+    {
+        // B&W look: satBoost 0 through gradedCopy -> the photo turns gray.
+        QImage redPhoto(64, 64, QImage::Format_ARGB32_Premultiplied);
+        redPhoto.fill(QColor(255, 0, 0));
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = false;
+        rs.bgGradientStyle = 0;
+        rs.autoColor = false;
+        rs.bgColor = 0xffffffff;
+        rs.photoGrade = true;
+        rs.saturationFactor = 0.0;
+        rs.sourceImage = redPhoto;
+        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+        QColor c = out.pixelColor(64, 64);
+        CHECK(qAbs(c.red() - c.green()) <= 3 && qAbs(c.green() - c.blue()) <= 3,
+              "look: satBoost 0 renders the photo grayscale (B&W look)");
+    }
+    {
+        // textureOverPhoto: the texture draws ON TOP of the photo. The photo
+        // here is flat gray (128) — Multiply with red gives (128, 0, 0):
+        // green/blue crushed proves the multiply ran OVER the photo; a
+        // non-running block would leave green ≈ 128.
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = false;
+        rs.bgGradientStyle = 0;
+        rs.autoColor = false;
+        rs.bgColor = 0xffffffff;
+        rs.textureImage = redOverlay;
+        rs.textureOpacity = 1.0;
+        rs.textureBlendMode = 13;
+        rs.textureOverPhoto = true;
+        rs.sourceImage = flat;
+        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+        QColor c = out.pixelColor(64, 64);
+        CHECK(qAbs(c.red() - 128) <= 10 && c.green() < 20 && c.blue() < 20,
+              "look: textureOverPhoto multiplies red OVER the gray photo");
+    }
+    {
+        // textureOverPhoto=false (default): texture stays UNDER the photo.
+        RenderSnapshot rs;
+        rs.W = 128; rs.H = 128;
+        rs.blurMode = false;
+        rs.bgGradientStyle = 0;
+        rs.autoColor = false;
+        rs.bgColor = 0xffffffff;
+        rs.textureImage = redOverlay;
+        rs.textureOpacity = 1.0;
+        rs.textureBlendMode = 13;
+        rs.sourceImage = flat;
+        QImage out = WallpaperProcessor::renderCore(rs, nullptr, nullptr, nullptr);
+        QColor c = out.pixelColor(64, 64);
+        CHECK(c.red() < 200 && c.blue() > 60,
+              "look: texture stays under the photo by default");
+    }
+    // Look table sanity: every row in range.
+    {
+        for (int i = 0; i < retroLookCount(); ++i) {
+            const LookConfig &l = retroLookConfig(i);
+            CHECK(l.satBoost >= 0.0 && l.satBoost <= 3.0, "look: satBoost in range");
+            CHECK(l.gamma >= 0.5 && l.gamma <= 2.5, "look: gamma in range");
+            CHECK(l.warmth >= -1.0 && l.warmth <= 1.0, "look: warmth in range");
+            CHECK(l.blackLift >= 0.0 && l.blackLift <= 1.0, "look: blackLift in range");
+            CHECK(l.frameWidthPct >= 0 && l.frameWidthPct <= 25, "look: frame width in range");
         }
-        CHECK(retroCount == 5, "retro: exactly 5 family presets");
     }
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);
