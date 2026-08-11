@@ -6,6 +6,7 @@
 #include <QSettings>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <cstdio>
 static int failures = 0;
@@ -173,6 +174,38 @@ int main(int argc, char **argv)
     p.restoreState();
     CHECK(p.photoGrade(), "F6 undo: look photo grade restored");
     CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "F6 undo: look grade restored");
+
+    // ── Dropzone: importOverlayFile copies, uniquifies, validates ──
+    {
+        const QString src1 = QDir::tempPath() + QStringLiteral("/walltz-import-a.png");
+        const QString bad  = QDir::tempPath() + QStringLiteral("/walltz-import.txt");
+        QImage img(8, 8, QImage::Format_ARGB32_Premultiplied);
+        img.fill(QColor(10, 20, 30));
+        img.save(src1, "PNG");
+        QFile f(bad);
+        f.open(QIODevice::WriteOnly);
+        f.write("nope");
+        f.close();
+
+        CHECK(p.importOverlayFile(src1), "drop: png accepted");
+        const QString first = p.texturePath();
+        CHECK(QFileInfo(first).suffix() == QStringLiteral("png"), "drop: imported path is a png");
+        CHECK(QFile::exists(first), "drop: file copied into overlays dir");
+        CHECK(p.importOverlayFile(src1), "drop: duplicate name still imported");
+        const QString second = p.texturePath();
+        CHECK(second != first && QFileInfo(second).fileName().contains(QStringLiteral("-1.")),
+              "drop: duplicate uniquified to -1");
+        CHECK(!p.importOverlayFile(bad), "drop: .txt rejected");
+        CHECK(p.texturePath() == second, "drop: rejection keeps previous selection");
+        CHECK(p.textureCatalog().size() >= 2, "drop: catalog refreshed after import");
+
+        // Cleanup: remove the test overlays dir + temp sources, clear selection.
+        const QString dir = QFileInfo(first).absolutePath();
+        p.setTexturePath(QString());
+        QDir(dir).removeRecursively();
+        QFile::remove(src1);
+        QFile::remove(bad);
+    }
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);
     return failures == 0 ? 0 : 1;

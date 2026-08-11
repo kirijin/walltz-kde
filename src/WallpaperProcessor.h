@@ -306,6 +306,10 @@ public:
     /// Overlay catalog (user assets in AppDataLocation/overlays).
     Q_INVOKABLE QStringList textureCatalog();
     Q_INVOKABLE QString textureCatalogDir() const;
+    /// Dropzone entry: copy a dropped image into the overlays dir (uniquified),
+    /// refresh the catalog, select it. Returns false + status message on
+    /// unreadable/non-image input.
+    Q_INVOKABLE bool importOverlayFile(const QString &srcPath);
 
     /// Mood palette access
     Q_INVOKABLE int moodCount() const { return 6; }

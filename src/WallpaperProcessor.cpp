@@ -2589,6 +2589,46 @@ QStringList WallpaperProcessor::textureCatalog()
     return m_textureCatalog;
 }
 
+bool WallpaperProcessor::importOverlayFile(const QString &srcPath)
+{
+    const QFileInfo src(srcPath);
+    if (!src.isFile() || !src.isReadable()) {
+        m_statusMessage = QStringLiteral("Cannot read overlay: %1").arg(srcPath);
+        Q_EMIT statusMessageChanged();
+        return false;
+    }
+    const QString suf = src.suffix().toLower();
+    if (suf != QStringLiteral("png") && suf != QStringLiteral("jpg")
+        && suf != QStringLiteral("jpeg") && suf != QStringLiteral("webp")) {
+        m_statusMessage = QStringLiteral("Overlay must be PNG/JPG/WebP: %1").arg(srcPath);
+        Q_EMIT statusMessageChanged();
+        return false;
+    }
+    const QString dir = textureCatalogDir();
+    if (!QDir().mkpath(dir)) return false;
+    QString dest = dir + QLatin1Char('/') + src.fileName();
+    if (QFile::exists(dest)) {
+        // Uniquify: name-1.png, name-2.png ... (drop the same file twice)
+        const QString base = src.completeBaseName();
+        const QString ext = src.suffix();
+        int n = 1;
+        do {
+            dest = dir + QLatin1Char('/') + base + QStringLiteral("-%1.").arg(n) + ext;
+            ++n;
+        } while (QFile::exists(dest));
+    }
+    if (!QFile::copy(srcPath, dest)) {
+        m_statusMessage = QStringLiteral("Could not copy overlay into %1").arg(dir);
+        Q_EMIT statusMessageChanged();
+        return false;
+    }
+    textureCatalog();   // re-scan + change signal (QML picker refresh)
+    m_texturePath = dest;
+    m_textureLoaded = QImage(dest);
+    Q_EMIT renderParamsChanged();
+    return true;
+}
+
 // ── F2: named-parameter presets (QSettings-backed) ─────────────────────
 // serializeParams/deserializeParams are the single source for both the
 // persisted presets and the in-memory undo snapshot (F6) — one map, two

@@ -1411,12 +1411,48 @@ Kirigami.ApplicationWindow {
                     }
                 }
 
-                Controls.Label {
+                // ── Dropzone: drag an image onto the app to add it ──
+                Rectangle {
                     Layout.fillWidth: true
-                    text: i18n("Drop PNG/JPG into %1", processor.textureCatalogDir())
-                    wrapMode: Text.WordWrap
-                    color: Kirigami.Theme.disabledTextColor
-                    visible: overlayItems.length === 0
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 4
+                    radius: 4
+                    color: overlayDrop.containsDrag
+                           ? Kirigami.Theme.highlightColor : "transparent"
+                    border.color: Kirigami.Theme.textColor
+                    border.width: 1
+
+                    DropArea {
+                        id: overlayDrop
+                        anchors.fill: parent
+                        onDropped: (drop) => {
+                            if (!drop.hasUrls) return
+                            // NOTE: drop.urls entries are JS strings here
+                            // (toString() of QUrl) — no toLocalFile(); decode
+                            // the file:// prefix + percent-escapes by hand.
+                            for (let i = 0; i < drop.urls.length; ++i) {
+                                const url = drop.urls[i]
+                                const path = url.startsWith("file://")
+                                    ? decodeURIComponent(url.substring(7)) : url
+                                if (processor.importOverlayFile(path))
+                                    previewDebounce.restart()
+                            }
+                        }
+                    }
+
+                    Controls.Label {
+                        anchors.centerIn: parent
+                        text: i18n("Drop an overlay image here (PNG/JPG)")
+                        color: Kirigami.Theme.textColor
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                    Controls.Label {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 4
+                        text: processor.textureCatalogDir()
+                        color: Kirigami.Theme.disabledTextColor
+                        font.pixelSize: Kirigami.Theme.smallFont.size
+                    }
                 }
 
                 RowLayout {
