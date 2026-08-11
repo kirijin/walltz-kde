@@ -1190,148 +1190,7 @@ Kirigami.ApplicationWindow {
 
             }
 
-            }  // end of leftColumn
-
-            // ── Elegant vertical separator ──
-            Rectangle {
-                Layout.fillHeight: true
-                Layout.topMargin: Kirigami.Units.smallSpacing
-                Layout.preferredWidth: 1
-                color: Kirigami.Theme.disabledTextColor
-                opacity: 0.25
-            }
-
-            // ── Right column: effects ──
-            ColumnLayout {
-                id: rightColumn
                 property var overlayItems: processor.textureCatalog()
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-                Layout.minimumWidth: Kirigami.Units.gridUnit * 14
-                Layout.maximumWidth: Kirigami.Units.gridUnit * 14
-                Layout.alignment: Qt.AlignTop
-                Layout.topMargin: Kirigami.Units.largeSpacing
-                spacing: Kirigami.Units.smallSpacing
-
-                Controls.Label {
-                    text: i18n("Effects")
-                    font.bold: true
-                    color: Kirigami.Theme.textColor
-                    horizontalAlignment: Text.AlignHCenter
-                    Layout.fillWidth: true
-                }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    columns: 2
-                    columnSpacing: Kirigami.Units.smallSpacing
-                    rowSpacing: 2
-
-                    Controls.ToolButton {
-                        display: Controls.AbstractButton.IconOnly
-                        contentItem: ThemedIcon { source: "qrc:/icons/vignette.svg" }
-                        Controls.ToolTip.text: i18n("Reset Vignette")
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onClicked: {
-                            processor.vignetteStrength = 0.0
-                            previewDebounce.restart()
-                        }
-                    }
-                    Controls.Slider {
-                        Layout.fillWidth: true
-                        from: 0; to: 1.0; stepSize: 0.05
-                        value: processor.vignetteStrength
-                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.vignetteStrength * 100))
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onMoved: {
-                            processor.vignetteStrength = value
-                            previewDebounce.restart()
-                        }
-                    }
-
-                    Controls.ToolButton {
-                        display: Controls.AbstractButton.IconOnly
-                        contentItem: ThemedIcon { source: "qrc:/icons/grain.svg" }
-                        Controls.ToolTip.text: i18n("Reset Grain")
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onClicked: {
-                            processor.grainStrength = 0.0
-                            previewDebounce.restart()
-                        }
-                    }
-                    Controls.Slider {
-                        Layout.fillWidth: true
-                        from: 0; to: 1.0; stepSize: 0.05
-                        value: processor.grainStrength
-                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.grainStrength * 100))
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onMoved: {
-                            processor.grainStrength = value
-                            previewDebounce.restart()
-                        }
-                    }
-
-                    Controls.ToolButton {
-                        display: Controls.AbstractButton.IconOnly
-                        contentItem: ThemedIcon { source: "qrc:/icons/chromatic-aberration.svg" }
-                        Controls.ToolTip.text: i18n("Reset Chromatic Aberration")
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onClicked: {
-                            processor.caStrength = 0.0
-                            previewDebounce.restart()
-                        }
-                    }
-                    Controls.Slider {
-                        Layout.fillWidth: true
-                        from: 0; to: 1.0; stepSize: 0.05
-                        value: processor.caStrength
-                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.caStrength * 100))
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onMoved: {
-                            processor.caStrength = value
-                            previewDebounce.restart()
-                        }
-                    }
-
-                    Controls.ToolButton {
-                        display: Controls.AbstractButton.IconOnly
-                        contentItem: ThemedIcon { source: "qrc:/icons/frame.svg" }
-                        Controls.ToolTip.text: i18n("Reset Photo Frame")
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onClicked: {
-                            processor.photoFrameWidth = 5
-                            processor.photoFrame = true
-                            previewDebounce.restart()
-                        }
-                    }
-                    Controls.Slider {
-                        id: frameWidthSlider
-                        Layout.fillWidth: true
-                        from: 0; to: 25; stepSize: 1
-                        value: processor.photoFrameWidth
-                        Controls.ToolTip.text: processor.photoFrameWidth === 0
-                                      ? i18n("Off")
-                                      : i18n("%1%", processor.photoFrameWidth)
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.delay: 400
-                        onMoved: {
-                            processor.photoFrameWidth = value
-                            if (value > 0) {
-                                processor.photoFrame = true
-                            } else {
-                                processor.photoFrame = false
-                            }
-                            previewDebounce.restart()
-                        }
-                    }
-                }
 
                 // ── Overlay (Phase 2): user-asset texture, Multiply blend ──
                 RowLayout {
@@ -1483,6 +1342,148 @@ Kirigami.ApplicationWindow {
                         }
                     }
                 }
+            }  // end of leftColumn
+
+            // ── Elegant vertical separator ──
+            Rectangle {
+                Layout.fillHeight: true
+                Layout.topMargin: Kirigami.Units.smallSpacing
+                Layout.preferredWidth: 1
+                color: Kirigami.Theme.disabledTextColor
+                opacity: 0.25
+            }
+
+            // ── Right column: effects ──
+            ColumnLayout {
+                id: rightColumn
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 14
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 14
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.Label {
+                    text: i18n("Effects")
+                    font.bold: true
+                    color: Kirigami.Theme.textColor
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    columns: 2
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: 2
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/vignette.svg" }
+                        Controls.ToolTip.text: i18n("Reset Vignette")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.vignetteStrength = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: 0; to: 1.0; stepSize: 0.05
+                        value: processor.vignetteStrength
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.vignetteStrength * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.vignetteStrength = value
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/grain.svg" }
+                        Controls.ToolTip.text: i18n("Reset Grain")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.grainStrength = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: 0; to: 1.0; stepSize: 0.05
+                        value: processor.grainStrength
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.grainStrength * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.grainStrength = value
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/chromatic-aberration.svg" }
+                        Controls.ToolTip.text: i18n("Reset Chromatic Aberration")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.caStrength = 0.0
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        Layout.fillWidth: true
+                        from: 0; to: 1.0; stepSize: 0.05
+                        value: processor.caStrength
+                        Controls.ToolTip.text: i18n("%1%", Math.round(processor.caStrength * 100))
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.caStrength = value
+                            previewDebounce.restart()
+                        }
+                    }
+
+                    Controls.ToolButton {
+                        display: Controls.AbstractButton.IconOnly
+                        contentItem: ThemedIcon { source: "qrc:/icons/frame.svg" }
+                        Controls.ToolTip.text: i18n("Reset Photo Frame")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onClicked: {
+                            processor.photoFrameWidth = 5
+                            processor.photoFrame = true
+                            previewDebounce.restart()
+                        }
+                    }
+                    Controls.Slider {
+                        id: frameWidthSlider
+                        Layout.fillWidth: true
+                        from: 0; to: 25; stepSize: 1
+                        value: processor.photoFrameWidth
+                        Controls.ToolTip.text: processor.photoFrameWidth === 0
+                                      ? i18n("Off")
+                                      : i18n("%1%", processor.photoFrameWidth)
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 400
+                        onMoved: {
+                            processor.photoFrameWidth = value
+                            if (value > 0) {
+                                processor.photoFrame = true
+                            } else {
+                                processor.photoFrame = false
+                            }
+                            previewDebounce.restart()
+                        }
+                    }
+                }
+
 
 
                 Controls.Label {
