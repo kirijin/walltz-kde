@@ -2349,6 +2349,30 @@ void WallpaperProcessor::setBlurPresetIndex(int index)
     // width; every other preset means frame OFF (so no frame leaks between presets).
     m_photoFrame      = cfg.frameEnabled;
     m_photoFrameWidth = cfg.frameEnabled ? cfg.frameWidthPct : 0;
+    // Holistic look fields: photoGrade rows (Kodachrome/Polaroid/Vintage/Tri-X/
+    // Cool Film) own the texture state — resolve the optional asset against
+    // the overlays dir, clear when absent; ordinary rows never touch the
+    // user's manually picked texture.
+    m_textureOverPhoto = cfg.textureOverPhoto;
+    m_textureOpacity   = cfg.textureOpacity;
+    m_textureBlendMode = qBound(0, cfg.textureBlendMode, 28);
+    m_photoGrade       = cfg.photoGrade;
+    if (cfg.photoGrade) {
+        if (cfg.textureAsset && *cfg.textureAsset) {
+            const QString path = textureCatalogDir()
+                                 + QLatin1Char('/') + QString::fromUtf8(cfg.textureAsset);
+            if (QFileInfo::exists(path)) {
+                m_texturePath = path;
+                m_textureLoaded = QImage(path);
+            } else {
+                m_texturePath.clear();
+                m_textureLoaded = QImage();
+            }
+        } else {
+            m_texturePath.clear();
+            m_textureLoaded = QImage();
+        }
+    }
     Q_EMIT blurPresetIdChanged();
     Q_EMIT renderParamsChanged();
 }
@@ -2368,7 +2392,6 @@ void WallpaperProcessor::resetBlurToDefault()
     m_textureBlendMode = WalltzDefaults::textureBlendMode;
     m_textureOverPhoto = false;
     m_photoGrade       = false;
-    m_retroLookIndex   = -1;
     m_overlayOpacity   = WalltzDefaults::overlayOpacity;
     m_overlayColor     = Qt::black;
     m_blurBrightness   = WalltzDefaults::blurBrightness;
@@ -2566,50 +2589,6 @@ QStringList WallpaperProcessor::textureCatalog()
     return m_textureCatalog;
 }
 
-QStringList WallpaperProcessor::retroLookNames() const
-{
-    QStringList names;
-    for (int i = 0; i < retroLookCount(); ++i)
-        names << QString::fromUtf8(retroLookName(i));
-    return names;
-}
-
-void WallpaperProcessor::applyRetroLook(int index)
-{
-    if (index < 0 || index >= retroLookCount()) return;
-    const LookConfig &l = retroLookConfig(index);
-    m_saturationFactor = qBound(0.0, l.satBoost, 3.0);
-    m_colorGamma       = l.gamma;
-    m_colorWarmth      = qBound(-1.0, l.warmth, 1.0);
-    m_colorBlackLift   = qBound(0.0, l.blackLift, 1.0);
-    m_vignetteStrength = qBound(0.0, l.vignette, 1.0);
-    m_grainStrength    = qBound(0.0, l.grain, 1.0);
-    m_photoFrame       = l.frameEnabled;
-    m_photoFrameWidth  = qBound(0, l.frameWidthPct, 25);
-    m_textureOverPhoto = l.textureOverPhoto;
-    m_textureOpacity   = qBound(0.0, l.textureOpacity, 1.0);
-    m_textureBlendMode = qBound(0, l.textureBlendMode, 28);
-    m_photoGrade       = true;
-    m_retroLookIndex   = index;
-    // Resolve the optional texture asset against the overlays dir; missing
-    // asset = the look still applies (color/frame/grain), texture stays off.
-    if (l.textureAsset && *l.textureAsset) {
-        const QString path = textureCatalogDir()
-                             + QLatin1Char('/') + QString::fromUtf8(l.textureAsset);
-        if (QFileInfo::exists(path)) {
-            m_texturePath = path;
-            m_textureLoaded = QImage(path);
-        } else {
-            m_texturePath.clear();
-            m_textureLoaded = QImage();
-        }
-    } else {
-        m_texturePath.clear();
-        m_textureLoaded = QImage();
-    }
-    Q_EMIT renderParamsChanged();
-}
-
 // ── F2: named-parameter presets (QSettings-backed) ─────────────────────
 // serializeParams/deserializeParams are the single source for both the
 // persisted presets and the in-memory undo snapshot (F6) — one map, two
@@ -2634,7 +2613,6 @@ QVariantMap WallpaperProcessor::serializeParams() const
     m.insert(QStringLiteral("textureBlendMode"), m_textureBlendMode);
     m.insert(QStringLiteral("textureOverPhoto"), m_textureOverPhoto);
     m.insert(QStringLiteral("photoGrade"), m_photoGrade);
-    m.insert(QStringLiteral("retroLookIndex"), m_retroLookIndex);
     m.insert(QStringLiteral("overlayOpacity"), m_overlayOpacity);   // tint overlay (pre-existing)
     m.insert(QStringLiteral("overlayColor"), m_overlayColor.name());
     m.insert(QStringLiteral("blurBrightness"), m_blurBrightness);
@@ -2687,7 +2665,6 @@ void WallpaperProcessor::deserializeParams(const QVariantMap &m)
     m_textureBlendMode = qBound(0, m.value(QStringLiteral("textureBlendMode"), m_textureBlendMode).toInt(), 28);
     m_textureOverPhoto = m.value(QStringLiteral("textureOverPhoto"), m_textureOverPhoto).toBool();
     m_photoGrade       = m.value(QStringLiteral("photoGrade"), m_photoGrade).toBool();
-    m_retroLookIndex   = m.value(QStringLiteral("retroLookIndex"), m_retroLookIndex).toInt();
     m_overlayOpacity   = m.value(QStringLiteral("overlayOpacity"), m_overlayOpacity).toDouble();
     m_overlayColor     = QColor(m.value(QStringLiteral("overlayColor"), m_overlayColor.name()).toString());
     m_blurBrightness   = m.value(QStringLiteral("blurBrightness"), m_blurBrightness).toDouble();

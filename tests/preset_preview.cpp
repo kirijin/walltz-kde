@@ -96,6 +96,7 @@ int main(int argc, char **argv)
             rs.colorGamma       = cfg.gamma;
             rs.colorWarmth      = cfg.warmth;
             rs.colorBlackLift   = cfg.blackLift;
+            rs.photoGrade       = cfg.photoGrade;
             rs.photoFrame       = cfg.frameEnabled;
             rs.photoFrameWidth  = cfg.frameEnabled ? cfg.frameWidthPct : 0;
             rs.sourceImage      = s.img;

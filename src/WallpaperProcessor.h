@@ -20,7 +20,6 @@
 #include <QFutureWatcher>
 
 #include "blur_presets.h"
-#include "retro_looks.h"
 #include "WallpaperAnalyzer.h"
 
 class QWindow;
@@ -163,7 +162,6 @@ class WallpaperProcessor : public QObject
     Q_PROPERTY(double caStrength READ caStrength WRITE setCaStrength NOTIFY renderParamsChanged)
     Q_PROPERTY(QString texturePath READ texturePath WRITE setTexturePath NOTIFY renderParamsChanged)
     Q_PROPERTY(double textureOpacity READ textureOpacity WRITE setTextureOpacity NOTIFY renderParamsChanged)
-    Q_PROPERTY(int retroLookIndex READ retroLookIndex NOTIFY renderParamsChanged)
     Q_PROPERTY(bool photoFrame READ photoFrame WRITE setPhotoFrame NOTIFY renderParamsChanged)
     Q_PROPERTY(int photoFrameWidth READ photoFrameWidth WRITE setPhotoFrameWidth NOTIFY renderParamsChanged)
     Q_PROPERTY(double fgZoom READ fgZoom WRITE setFgZoom NOTIFY renderParamsChanged)
@@ -230,7 +228,7 @@ public:
     QString texturePath() const { return m_texturePath; }
     double textureOpacity() const { return m_textureOpacity; }
     int textureBlendMode() const { return m_textureBlendMode; }
-    int retroLookIndex() const { return m_retroLookIndex; }
+    bool photoGrade() const { return m_photoGrade; }
     bool photoFrame() const { return m_photoFrame; }
     int photoFrameWidth() const { return m_photoFrameWidth; }
     double fgZoom() const { return m_fgZoom; }
@@ -308,11 +306,6 @@ public:
     /// Overlay catalog (user assets in AppDataLocation/overlays).
     Q_INVOKABLE QStringList textureCatalog();
     Q_INVOKABLE QString textureCatalogDir() const;
-
-    /// Holistic retro looks (4th tab): apply a complete photo treatment.
-    Q_INVOKABLE int retroLookCount() const { return ::retroLookCount(); }
-    Q_INVOKABLE QStringList retroLookNames() const;
-    Q_INVOKABLE void applyRetroLook(int index);
 
     /// Mood palette access
     Q_INVOKABLE int moodCount() const { return 6; }
@@ -501,8 +494,7 @@ private:
     QImage  m_textureLoaded;                     // resolved on the main thread
     QStringList m_textureCatalog;                // cached scan of the overlays dir
     bool    m_textureOverPhoto = false;
-    bool    m_photoGrade = false;                // retro look active: grade the photo
-    int     m_retroLookIndex = -1;               // active look; -1 = none
+    bool    m_photoGrade = false;                // photo look active: grade the photo
 
     /// Build a fully-resolved snapshot from current member state + source.
     /// Must be called on the main thread (reads members, resolves mood colors).

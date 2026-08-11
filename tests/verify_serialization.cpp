@@ -156,21 +156,22 @@ int main(int argc, char **argv)
         QFile::remove(tmpOverlay);
     }
 
-    // ── Retro look (4th tab): apply + locked-default invariant + F6 ──
-    p.applyRetroLook(1);   // Polaroid: sat 1.0, γ 0.94, warmth -0.04, lift 0.18, frame 3%
+    // ── Holistic looks in the blur preset table: apply + locked-default + F6 ──
+    p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Polaroid));   // sat 1.0, γ 0.94, warm -0.04, frame 3%
     CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "look: polaroid applies gamma 0.94");
     CHECK(qFuzzyCompare(p.colorWarmth(), -0.04), "look: polaroid applies warmth -0.04");
     CHECK(qFuzzyCompare(p.saturationFactor(), 1.0), "look: polaroid applies satBoost 1.0");
     CHECK(p.photoFrame() && p.photoFrameWidth() == 3, "look: polaroid applies frame 3%");
-    CHECK(p.retroLookIndex() == 1, "look: active look index tracked");
+    CHECK(p.photoGrade(), "look: polaroid turns photo grading on");
+    CHECK(p.blurPresetIndex() == static_cast<int>(BlurPresetId::Polaroid), "look: preset index tracked");
     // F6 undo keeps the look state.
     p.rememberState();
     p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Default));   // locked -> factory reset
-    CHECK(p.retroLookIndex() == -1, "look: default clears look selection");
+    CHECK(p.photoGrade() == false, "look: default clears photo grade");
     CHECK(p.photoFrame() == false, "look: default clears frame");
     CHECK(qFuzzyCompare(p.colorGamma(), 1.0), "look: default clears grade");
     p.restoreState();
-    CHECK(p.retroLookIndex() == 1, "F6 undo: look selection restored");
+    CHECK(p.photoGrade(), "F6 undo: look photo grade restored");
     CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "F6 undo: look grade restored");
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);

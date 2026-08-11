@@ -340,16 +340,20 @@ int main(int argc, char **argv)
         CHECK(c.red() < 200 && c.blue() > 60,
               "look: texture stays under the photo by default");
     }
-    // Look table sanity: every row in range.
+    // Look table sanity: every photoGrade row in range.
     {
-        for (int i = 0; i < retroLookCount(); ++i) {
-            const LookConfig &l = retroLookConfig(i);
+        int lookRows = 0;
+        for (int i = 0; i < blurPresetCount(); ++i) {
+            const BlurConfig &l = blurPresetConfig(i);
+            if (!l.photoGrade) continue;
+            lookRows++;
             CHECK(l.satBoost >= 0.0 && l.satBoost <= 3.0, "look: satBoost in range");
             CHECK(l.gamma >= 0.5 && l.gamma <= 2.5, "look: gamma in range");
             CHECK(l.warmth >= -1.0 && l.warmth <= 1.0, "look: warmth in range");
             CHECK(l.blackLift >= 0.0 && l.blackLift <= 1.0, "look: blackLift in range");
             CHECK(l.frameWidthPct >= 0 && l.frameWidthPct <= 25, "look: frame width in range");
         }
+        CHECK(lookRows == 5, "look: exactly 5 photoGrade rows");
     }
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);

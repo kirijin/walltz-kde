@@ -13,8 +13,6 @@ target_sources(walltz PRIVATE
     WallpaperProcessor.cpp
     blur_presets.h
     blur_presets.cpp
-    retro_looks.h
-    retro_looks.cpp
     WallpaperAnalyzer.h
     WallpaperAnalyzer.cpp
     icons.qrc

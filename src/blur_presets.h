@@ -32,6 +32,17 @@ struct BlurConfig {
     double warmth     = 0.0;       // -1..1, R/B balance (positive = warm)
     double blackLift  = 0.0;       // shadow floor 0..1 (faded-film look)
 
+    // Holistic look fields (2026-08-11): photo-grade + texture composition.
+    // photoGrade rows are full photo looks: the grade applies to the PHOTO
+    // itself (and its blurred background), the texture (if any) resolves
+    // against the user's overlays dir at apply time. Non-look rows never
+    // touch texture state.
+    const char *textureAsset = nullptr;  // file name in overlays dir
+    double textureOpacity = 0.0;
+    int    textureBlendMode = 13;        // QPainter CompositionMode
+    bool   textureOverPhoto = false;     // draw the texture ON TOP of the photo
+    bool   photoGrade = false;           // look: grade the photo itself
+
     /// The "Default" preset is the immutable factory baseline — must not be overwritten.
     bool isLocked() const { return qstrcmp(id, "default") == 0; }
 };
@@ -47,6 +58,11 @@ enum class BlurPresetId {
     Mica,
     Acrylic,
     Reddit,
+    Kodachrome,
+    Polaroid,
+    Vintage,
+    TriX,
+    CoolFilm,
     Count   // sentinel — not a real preset
 };
 

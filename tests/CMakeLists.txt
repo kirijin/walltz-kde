@@ -13,7 +13,6 @@ if(BUILD_TESTING)
     target_sources(walltz_render_test PRIVATE
         ../src/WallpaperProcessor.cpp
         ../src/blur_presets.cpp
-        ../src/retro_looks.cpp
         ../src/WallpaperAnalyzer.cpp
     )
 
@@ -47,7 +46,6 @@ if(BUILD_TESTING)
     target_sources(walltz_baseline_test PRIVATE
         ../src/WallpaperProcessor.cpp
         ../src/blur_presets.cpp
-        ../src/retro_looks.cpp
         ../src/WallpaperAnalyzer.cpp
     )
     target_include_directories(walltz_baseline_test PRIVATE ../src)
@@ -76,7 +74,6 @@ if(BUILD_TESTING)
     target_sources(walltz_preset_preview PRIVATE
         ../src/WallpaperProcessor.cpp
         ../src/blur_presets.cpp
-        ../src/retro_looks.cpp
         ../src/WallpaperAnalyzer.cpp
     )
     target_include_directories(walltz_preset_preview PRIVATE ../src)
@@ -103,7 +100,6 @@ if(BUILD_TESTING)
     target_sources(walltz_blur_regression PRIVATE
         ../src/WallpaperProcessor.cpp
         ../src/blur_presets.cpp
-        ../src/retro_looks.cpp
         ../src/WallpaperAnalyzer.cpp
     )
     target_include_directories(walltz_blur_regression PRIVATE ../src)
@@ -131,7 +127,6 @@ if(BUILD_TESTING)
     target_sources(walltz_serialization_test PRIVATE
         ../src/WallpaperProcessor.cpp
         ../src/blur_presets.cpp
-        ../src/retro_looks.cpp
         ../src/WallpaperAnalyzer.cpp
     )
     target_include_directories(walltz_serialization_test PRIVATE ../src)
