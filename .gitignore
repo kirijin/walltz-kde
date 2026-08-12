@@ -25,3 +25,6 @@ flatpak-build/
 .hermes/
 build-dir/
 AGENTS.md
+
+# Agent decision log (local-only until user approves committing it)
+.memlog.md
