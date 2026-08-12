@@ -121,10 +121,10 @@ int main(int argc, char **argv)
     p.deleteParamPreset(QStringLiteral("verify-b3-preset"));
 
     // ── Holistic looks in the blur preset table: apply + locked-default + F6 ──
-    p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Polaroid));   // sat 1.0, γ 0.94, warm -0.04, frame 3%
+    p.setBlurPresetIndex(static_cast<int>(BlurPresetId::Polaroid));   // sat 0.9, γ 0.94, warm -0.04, frame 3%
     CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "look: polaroid applies gamma 0.94");
     CHECK(qFuzzyCompare(p.colorWarmth(), -0.04), "look: polaroid applies warmth -0.04");
-    CHECK(qFuzzyCompare(p.saturationFactor(), 1.0), "look: polaroid applies satBoost 1.0");
+    CHECK(qFuzzyCompare(p.saturationFactor(), 0.9), "look: polaroid applies satBoost 0.9");
     CHECK(p.photoFrame() && p.photoFrameWidth() == 3, "look: polaroid applies frame 3%");
     CHECK(p.photoGrade(), "look: polaroid turns photo grading on");
     CHECK(p.textureKind() == 0, "look: polaroid uses the built-in matte frame (no texture)");
