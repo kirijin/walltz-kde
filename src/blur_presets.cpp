@@ -25,13 +25,14 @@ static const BlurConfig s_presets[] = {
     // width; corner rounding stays the frame default (no new frame style).
     { "reddit",  "Reddit",  24,    1.0,  1.00,   0.70,  0x0B0E0F,  0.0,  0.0,  true, 1,  1.0,  0.0,  0.0,  0, 0.0,  13,  false, 0,    false },
     // Holistic photo looks (2026-08-11): photoGrade rows grade the PHOTO
-    // itself + background, and bundle frame/grain/vignette/texture — the
-    // "olden era" presets. Curve shapes re-derived from XnRetro's LUTs and
-    // classic film conventions, calm-tamed starters for the tune loop.
-    // textureAsset (optional) resolves in the overlays dir; absent = look
-    // still applies, texture stays off.
+    // itself + background, and bundle frame/grain/vignette/procedural texture
+    // (textureKind: 1 leak, 2 polaroid frame, 3 film border) — the "olden
+    // era" presets. Polaroid uses the BUILT-IN matte frame (default rounding
+    // + shadow); the others carry atmosphere textures over the photo.
+    // Curve shapes re-derived from XnRetro's LUTs and classic film
+    // conventions, calm-tamed starters for the tune loop.
     { "kodachrome","Kodachrome", 90,  1.5,  1.00,   0.0,  0x000000,  0.0,  0.02, false, 0,  0.98,  0.22,  0.05,  1, 0.20,  13,  true,  0xE8A050, true  },
-    { "polaroid",  "Polaroid",   90,  1.0,  1.00,   0.0,  0x000000,  0.15, 0.03, true,  3,  0.94, -0.04, 0.18,  2, 1.00,   0,   true,  0x000000, true  },
+    { "polaroid",  "Polaroid",   90,  1.0,  1.00,   0.0,  0x000000,  0.15, 0.03, true,  3,  0.94, -0.04, 0.18,  0, 0.0,   13,  false, 0x000000, true  },
     { "vintage",   "Vintage",    90,  1.2,  1.00,   0.0,  0x000000,  0.20, 0.04, true,  1,  1.06,  0.30, 0.00,  1, 0.28,  13,  true,  0xC87030, true  },
     { "trix",      "Tri-X",      90,  0.0,  1.00,   0.0,  0x000000,  0.25, 0.08, true,  1,  1.10,  0.00, 0.06,  3, 0.90,  13,  true,  0x000000, true  },
     { "coolfilm",  "Cool Film",  90,  1.1,  1.00,   0.0,  0x000000,  0.10, 0.02, false, 0,  1.03, -0.20, 0.08,  1, 0.18,  13,  true,  0x70A8D0, true  },

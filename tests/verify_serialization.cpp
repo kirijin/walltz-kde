@@ -127,8 +127,7 @@ int main(int argc, char **argv)
     CHECK(qFuzzyCompare(p.saturationFactor(), 1.0), "look: polaroid applies satBoost 1.0");
     CHECK(p.photoFrame() && p.photoFrameWidth() == 3, "look: polaroid applies frame 3%");
     CHECK(p.photoGrade(), "look: polaroid turns photo grading on");
-    CHECK(p.textureKind() == 2 && p.textureOverPhoto() && qFuzzyCompare(p.textureOpacity(), 1.0)
-          && p.textureBlendMode() == 0, "look: polaroid carries its procedural frame");
+    CHECK(p.textureKind() == 0, "look: polaroid uses the built-in matte frame (no texture)");
     CHECK(p.blurPresetIndex() == static_cast<int>(BlurPresetId::Polaroid), "look: preset index tracked");
     // F6 undo keeps the look state.
     p.rememberState();
@@ -139,7 +138,7 @@ int main(int argc, char **argv)
     CHECK(qFuzzyCompare(p.colorGamma(), 1.0), "look: default clears grade");
     p.restoreState();
     CHECK(p.photoGrade(), "F6 undo: look photo grade restored");
-    CHECK(p.textureKind() == 2, "F6 undo: look texture restored");
+    CHECK(p.photoFrame(), "F6 undo: look frame restored");
     CHECK(qFuzzyCompare(p.colorGamma(), 0.94), "F6 undo: look grade restored");
 
     std::printf(failures == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", failures);

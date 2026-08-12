@@ -339,7 +339,11 @@ int main(int argc, char **argv)
             CHECK(l.warmth >= -1.0 && l.warmth <= 1.0, "look: warmth in range");
             CHECK(l.blackLift >= 0.0 && l.blackLift <= 1.0, "look: blackLift in range");
             CHECK(l.frameWidthPct >= 0 && l.frameWidthPct <= 25, "look: frame width in range");
-            CHECK(l.textureKind >= 1 && l.textureKind <= 3, "look: every look carries a texture kind");
+            // A look is complete with a frame OR a procedural texture
+            // (Polaroid uses the built-in matte frame — default rounding +
+            // shadow; the others carry atmosphere textures).
+            CHECK((l.textureKind >= 1 && l.textureKind <= 3) || l.frameEnabled,
+                  "look: every look has a frame or a texture");
         }
         CHECK(lookRows == 5, "look: exactly 5 photoGrade rows");
     }
