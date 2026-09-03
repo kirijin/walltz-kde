@@ -974,11 +974,13 @@ QImage WallpaperProcessor::renderCore(const RenderSnapshot &rs,
     if (rs.grainStrength > 0.001) {
         const int intensity = qMax(1, (int)(15 * rs.grainStrength));
         QImage grain(W, H, QImage::Format_Grayscale8);
+        // H2: thread-local RNG — QRandomGenerator::global() contends across workers.
+        static thread_local QRandomGenerator tlsrng(QRandomGenerator::global()->generate());
         for (int y = 0; y < H; ++y) {
             unsigned char *line = grain.scanLine(y);
             for (int x = 0; x < W; ++x)
                 line[x] = (unsigned char)qBound(0,
-                    (int)(QRandomGenerator::global()->bounded(intensity * 2 + 1))
+                    (int)(tlsrng.bounded(intensity * 2 + 1))
                     - intensity + 128, 255);
         }
         p.save();
@@ -2787,9 +2789,8 @@ bool WallpaperProcessor::setAsWallpaper(const QString &path, int target)
 {
     if (path.isEmpty() || !QFile::exists(path)) return false;
 
-    QFile *file = new QFile(path);
+    auto file = QSharedPointer<QFile>::create(path);
     if (!file->open(QIODevice::ReadOnly)) {
-        delete file;
         return false;
     }
 
@@ -2821,7 +2822,6 @@ bool WallpaperProcessor::setAsWallpaper(const QString &path, int target)
         watcher->deleteLater();
         const QDBusPendingReply<QDBusObjectPath> reply = *watcher;
         // The portal has copied the file by reply time; our fd is no longer needed.
-        file->deleteLater();
         if (reply.isError()) {
             // No portal on this desktop — the saved file IS the deliverable.
             saveToPictures(path);

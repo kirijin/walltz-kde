@@ -1820,7 +1820,8 @@ Kirigami.ApplicationWindow {
         }
         // Strip cache-bust for URL comparison — same path = same file
         var oldUrl = previewA.source.toString().replace(/\?t=\d+$/, "");
-        if (oldUrl === newUrl) {
+        var cleanNewUrl = newUrl.replace(/\?t=\d+$/, "");
+        if (oldUrl === cleanNewUrl) {
             // Touch source to force QML image cache refresh
             previewA.source = "";
             previewA.source = newUrl;
